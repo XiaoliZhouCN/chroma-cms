@@ -1,0 +1,41 @@
+# ---- 构建产物 ----
+/build/
+/out/
+/install/
+/CMakeUserPresets.json
+*.user
+*.sln
+*.vcxproj*
+*_autogen/
+compile_commands.json
+
+# ---- 依赖（由 vcpkg / Skia 构建流程生成，不入库）----
+/vcpkg_installed/
+/third_party/
+/.skia/
+
+# ---- 工具缓存 ----
+/.cache/
+/node_modules/
+
+# ---- IDE / 系统 ----
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# ---- 调试与捕获产物 ----
+*.pdb
+*.ilk
+*.obj
+*.log
+*.wpix
+*.rdc
+*.etl
+
+# ---- 本地临时区：永不提交 ----
+temp_and_scratch/
+
+# ---- instruments 只提交说明与脚本，不提交大体积工件 ----
+/instruments/artifacts/

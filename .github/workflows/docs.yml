@@ -1,0 +1,17 @@
+name: docs
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 文档门禁
+        shell: pwsh
+        run: ./scripts/check-docs.ps1
