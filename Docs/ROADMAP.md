@@ -8,15 +8,17 @@ updated: 2026-11-04
 
 > 每个里程碑必须有**可验证的出口条件**。没有出口条件的条目不算里程碑，只是愿望。
 
-## 当前：M0（文档骨架 + 构建骨架）
+## M0：文档骨架 + 构建骨架（已完成 · 2026-11-04）
 
 **出口条件**
 
-- [x] 文档框架落地，`check-docs` 通过
+- [x] 文档框架落地，`check-docs` 通过（243 项检查）
 - [x] git 仓库建立，`develop` 为日常分支，`main` 为空
-- [ ] `CMakeLists.txt` + `CMakePresets.json` + `vcpkg.json` 可用
-- [ ] Skia D3D12 源码构建成功，`external/skia/out/Release` 有产物
-- [ ] 空窗口启动，`ctest` 有一个能跑的占位用例
+- [x] `CMakeLists.txt` + `CMakePresets.json` + `cmake/` 辅助可用
+- [x] 空窗口启动成功（`app.selftest` 通过，原生 HWND 已打印）
+- [x] `ctest` 有可运行的用例（`unit.smoke` + `app.selftest`）
+- [→] Skia D3D12 源码构建：**移出 M0**，改为 M3 的前置任务（见 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)、[BUILD.md](BUILD.md) §4）
+- [✗] `vcpkg.json`：M0–M3 都不需要（Qt 已在本地、FFmpeg 到 M4 才引入），不建
 
 ## M1：原生 D3D12 显示静态图（sRGB 直通）
 
@@ -51,6 +53,8 @@ updated: 2026-11-04
 - 与 CPU 参考实现逐像素 ΔE00 ≤ 0.5
 
 ## M3：Skia D3D12 后端 + 双后端一致性
+
+**前置**：完成 Skia 源码构建（`skia_use_direct3d=true`），见 [BUILD.md](BUILD.md) §4 与 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)。**这是本项目唯一的长周期依赖，需提前排期。**
 
 **目标**：同一套数学在 Skia 上复现，并证明等价。
 
@@ -106,7 +110,7 @@ updated: 2026-11-04
 
 | # | 问题 | 影响 | 状态 |
 |---|---|---|---|
-| Q1 | 交换链用 10-bit SDR 还是 scRGB 16F | 决定 ADR-0007 与 Pass 2 输出 | **proposed**，见 [ADR-0007](adr/0007-swapchain-format-and-color-space.md) |
+| Q1 | 交换链用 10-bit SDR 还是 scRGB 16F | 决定 ADR-0007 与 Pass 2 输出 | **已实测**：本机 `R10G10B10A2_UNORM` + `RGB_FULL_G22_NONE_P709` 支持；16F 仅支持 scRGB。见 [ADR-0007](adr/0007-swapchain-format-and-color-space.md) |
 | Q2 | Skia 能否直接 wrap 交换链后台缓冲为 `SkSurface` | 决定 M3 的呈现路径 | 待验证 |
 | Q3 | Qt 走 vcpkg 还是官方安装器 | 决定 BUILD §5 的默认路径 | 待定 |
 | Q4 | 是否需要多显示器同时渲染 | 影响 L0 的设备/交换链管理 | 待定 |

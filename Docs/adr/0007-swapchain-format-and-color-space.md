@@ -63,6 +63,28 @@ Pass 2 的输出必须是交换链后台缓冲。格式与声明的色彩空间�
 | B | `R16G16B16A16_FLOAT` + `RGB_FULL_G10_NONE_P709`（scRGB） | 线性输出、超范围值可表达、HDR 友好 | 80 nits 参考语义与 DWM 合成规则更绕；一期会把"线性 vs 编码"的教学顺序打乱；留作二期备选 |
 | C | `B8G8R8A8_UNORM` + `G22_NONE_P709` | 兼容性最好 | 8-bit 必须靠抖动，掩盖色彩管线本身的精度问题；仅作降级 |
 
+## 实测（2026-11-04，本机）
+
+| 项 | 结果 |
+|---|---|
+| 适配器 | Intel UHD Graphics，D3D12 特性等级 **12_1** |
+| 输出 | `\\.\DISPLAY1`，`BitsPerColor = 8`，当前 `RGB_FULL_G22_NONE_P709`，峰值 270 nits |
+| `R10G10B10A2_UNORM` 交换链 | 创建成功 |
+| ↳ `RGB_FULL_G22_NONE_P709` | **SUPPORTED** |
+| ↳ `RGB_FULL_G2084_NONE_P2020` | **SUPPORTED** |
+| ↳ `RGB_FULL_G10_NONE_P709` | NOT SUPPORTED |
+| `R8G8B8A8_UNORM` / `B8G8R8A8_UNORM` | 创建成功，SDR 与 HDR10 均 SUPPORTED |
+| `R16G16B16A16_FLOAT` | 创建成功，**仅** `RGB_FULL_G10_NONE_P709`（scRGB）SUPPORTED |
+
+结论：
+
+1. **方案 A 在本机可行**，`R10G10B10A2_UNORM` + `RGB_FULL_G22_NONE_P709` 是有效组合。
+2. `BitsPerColor = 8` 说明**输出链路是 8-bit**：交换链的 10-bit 价值在于量化前的中间精度与抖动效果，**不要在本项目里声称"10-bit 显示"**。
+3. HDR10 色彩空间声明是 SUPPORTED，但当前系统 HDR 关闭、输出 8bpc。二期必须先读系统 HDR 状态与 `GetDesc1`，不能只看 `CheckColorSpaceSupport`。
+4. 踩坑：`CreateSwapChainForHwnd` 在 D3D12 下第一个参数必须传 **`ID3D12CommandQueue`**，传 `ID3D12Device` 会得到 `DXGI_ERROR_INVALID_CALL (0x887A0001)`。
+
+状态变更条件：M1 完成实现并跑通后改为 `accepted`；若届时发现 8-bit 输出链路导致抖动不可验证，则回退到方案 C 并另写 ADR。
+
 ## 参考
 
 - `IDXGISwapChain3::SetColorSpace1` / `CheckColorSpaceSupport`

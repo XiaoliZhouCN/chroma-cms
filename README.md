@@ -23,18 +23,18 @@ updated: 2026-11-04
 
 | 层 | 选择 | 记录 |
 |---|---|---|
-| 窗口 / UI | Qt 6 Widgets，自绘 `QWidget` 承载原生表面 | [ADR-0002](Docs/adr/0002-qt-widgets-native-surface.md) |
+| 窗口 / UI | Qt 6.11 Widgets，自绘 `QWidget` 承载原生表面 | [ADR-0002](Docs/adr/0002-qt-widgets-native-surface.md) |
 | 图形 API | D3D12 原生 / Skia Ganesh D3D12 | [ADR-0003](Docs/adr/0003-dual-render-backend.md) |
 | 色彩管理 | 自研 HLSL / SkSL，CPU 双精度参考实现作 oracle | [ADR-0004](Docs/adr/0004-self-implemented-color-management.md) |
 | 视频解码 | FFmpeg（读取原始色彩元数据） | [ADR-0005](Docs/adr/0005-ffmpeg-for-video-decode.md) |
-| 构建 | CMake + vcpkg + 源码构建 Skia | [ADR-0006](Docs/adr/0006-cmake-vcpkg-source-built-skia.md) |
-| 平台 | Windows 10 1903+ / 11，x64 | — |
+| 构建 | CMake 4.2 + VS 2026 生成器；Skia 源码构建（M3 前置） | [ADR-0006](Docs/adr/0006-cmake-vcpkg-source-built-skia.md) |
+| 平台 | Windows 10/11 x64，D3D12 特性等级 ≥ 12_0（本机 Intel UHD 为 12_1） | — |
 
 ## 当前状态
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **M0**：文档骨架 + 构建骨架（尚无渲染代码） |
+| 阶段 | **M0 完成**：构建骨架 + 空窗口 + 测试链路（尚无渲染代码），下一步 M1 |
 | 日常分支 | `develop` |
 | 默认分支 | `main`（**保持为空**，仅作为占位） |
 | 下一步 | 见 [Docs/ROADMAP.md](Docs/ROADMAP.md) 的 M1 出口条件 |

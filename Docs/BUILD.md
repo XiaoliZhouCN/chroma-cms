@@ -6,90 +6,77 @@ updated: 2026-11-04
 
 # 构建与环境
 
-> 当前阶段 M0：构建骨架尚未落地。文中标 **【待验证】** 的条目必须在 M1 期间实测后去掉标记；未验证的内容不得当成事实引用。
+> 本文记录**本机实测过**的环境与命令。未实测的内容标 **【待验证】**，不得当成事实引用。
 
-## 1. 前置环境
+## 1. 实测环境（2026-11-04）
 
-| 组件 | 版本 | 获取方式 |
+| 组件 | 实测值 | 说明 |
 |---|---|---|
-| Windows | 10 1903+ / 11，x64 | — |
-| Visual Studio 2022 | 17.10+，含 "使用 C++ 的桌面开发" | 官方安装器 |
-| Windows SDK | 10.0.22621.0+ | VS 安装器勾选 |
-| CMake | ≥ 3.28 | VS 自带或官方安装器 |
-| Ninja | 任意近期版本 | vcpkg / VS 自带 |
-| Git | ≥ 2.40 | 官方 |
-| PowerShell | 5.1+（Windows 自带；无需装 PowerShell 7） | — |
-| Python | 3.11+（Skia 构建脚本需要） | python.org |
-| Qt | 6.8 LTS（MSVC 2022 x64） | vcpkg 或官方安装器 |
-| FFmpeg | 开发包（shared 或 static） | vcpkg |
-| Skia | 源码构建（见 §3） | depot_tools |
+| OS | Windows（Build 26300 系列） | x64 |
+| Visual Studio | **2026 Professional 18.8** | 工具集 MSVC **19.51**（14.51.36231） |
+| Windows SDK | 10.0.26100 / 10.0.28000 | 构建实际选用 26100 系列 |
+| CMake | **4.2.1** | 生成器 `Visual Studio 18 2026` |
+| Ninja | QtCreator 自带 | 当前 preset 未使用（用 VS 生成器） |
+| Qt | **6.11.1 msvc2022_64** | `D:\Applications\QtCreator\6.11.1\msvc2022_64` |
+| GPU | **Intel UHD Graphics**，D3D12 特性等级 **12_1** | 集显，共享内存；够用 |
+| D3D12 调试层 | **可用**（`d3d12SDKLayers.dll` 存在） | 启动时应启用 |
+| HLSL 编译器 | `fxc.exe` / `dxc.exe` 均在 SDK 10.0.26100 x64 下 | 离线编译可用 |
+| vcpkg | **未安装** | M0–M3 不需要；M4 引入 FFmpeg 时再定 |
+| Python | 3.14.2 | **对 Skia/depot_tools 偏新**，见 §4 |
 
-## 2. 目录布局（约定）
+## 2. 目录布局
 
 ```
 <repo>/
 ├── CMakeLists.txt
 ├── CMakePresets.json
-├── vcpkg.json
-├── src/  shaders/  tests/  assets/
-└── external/            # 不入库；本机依赖根
-    ├── skia/            # 源码 + out/Release
-    └── qt/              # 若不用 vcpkg 的 Qt
+├── cmake/                 QtBootstrap.cmake · CompilerWarnings.cmake
+├── src/
+│   ├── core/              无 Qt 依赖的基础层（chroma_core，INTERFACE）
+│   └── app/               Qt 外壳 + 原生表面宿主
+├── tests/                 unit/（无 GUI）· 集成 ctest
+└── build/                 生成物（gitignore）
 ```
 
-`external/` 与 `build/` 均在 `.gitignore` 中。仓库只保存**如何得到依赖**的脚本与文档，不保存依赖本体。
+## 3. Qt 的定位方式
 
-## 3. Skia（源码构建）
+`cmake/QtBootstrap.cmake` 会依次尝试：
 
-D3D12 后端需要 `skia_use_direct3d=true`，官方预编译包不提供，因此必须源码构建。
+1. 显式传入的 `-DQT_ROOT=<Qt msvc*_64 目录>`；
+2. 扫描 `C:/Qt/6.*/msvc*_64`、`D:/Qt/6.*/msvc*_64`、`D:/Applications/QtCreator/6.*/msvc*_64`，取**版本号最大**的一个。
+
+本机命中第 2 条，解析到 `D:\Applications\QtCreator\6.11.1\msvc2022_64`。
+**本机绝对路径不写进 `CMakePresets.json`**，避免换机即坏。
+
+Qt 6.11.1 是用 MSVC 2022（v143）构建的，用 VS2026（v145）工具集链接**实测可用**（MSVC v14x ABI 兼容）。
+
+## 4. Skia（M3 才需要）
+
+已决定**不进入 M0–M2 关键路径**（`CHROMA_WITH_SKIA=OFF` 默认关闭）。开启时需要：
 
 ```powershell
-# 一次性：拉取 depot_tools 并加入 PATH
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git D:\tools\depot_tools
-
-# 拉取 Skia
 git clone https://skia.googlesource.com/skia D:\Repos\external\skia
 cd D:\Repos\external\skia
 python tools/git-sync-deps
-```
-
-```powershell
-# 生成并构建（Debug 同理，换 out\Debug）
-bin\gn gen out\Release --args="is_debug=false is_official_build=true skia_use_direct3d=true skia_use_gl=false skia_use_vulkan=false skia_enable_ganesh=true skia_enable_graphite=false skia_use_system_expat=false skia_use_system_freetype2=false"
+bin\gn gen out\Release --args="is_debug=false is_official_build=true skia_use_direct3d=true skia_use_gl=false skia_use_vulkan=false skia_enable_ganesh=true"
 ninja -C out\Release skia
 ```
 
 **【待验证】**
 1. `skia_use_direct3d` 在当前 Skia 版本的实际开关名与依赖项。
-2. 产物名与形态（`skia.lib` 静态 vs `skia.dll` 动态），以及是否需要 `skia_use_icu`/`skia_use_libpng` 等额外开关。
+2. 产物名与形态（`skia.lib` 静态 vs `skia.dll` 动态）。
 3. `GrDirectContext::MakeDirect3D` 与 `GrD3DBackendContext` 的当前签名。
-4. 是否必须同时启用 `skia_use_dawn`。
+4. **Python 3.14 是否被 depot_tools / Skia 脚本支持**——大概率需要单独装 3.11/3.12。
 
-以上任一项与原假设不符，**先改本文与 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)，再改构建脚本**。
+以上任一与本假设不符，**先改本文与 ADR-0006，再改构建脚本**。
 
-CMake 侧通过 `-DSKIA_DIR=D:/Repos/external/skia` 引入，且只链接构建产物目录，不改 Skia 源码。
+磁盘注意：C: 仅剩 ~12 GB，Skia 构建（10 GB+）必须放在 D:（仓库所在盘，余量 300 GB+）。
 
-## 4. FFmpeg
-
-通过 vcpkg 获取：`vcpkg.json` 中声明 `ffmpeg` 特性（`avcodec`/`avformat`/`swscale`/`avutil`）。
-
-**许可注意**：启用 `x264` 等 GPL 组件会使整体变为 GPL。本项目为学习用途、不发布二进制，默认可开 GPL 组件；若将来要分发，需要重新评估并写 ADR。
-
-**【待验证】** vcpkg 的 ffmpeg 端口在本机 triple（`x64-windows`）下的默认特性与 DLL 拷贝行为。
-
-## 5. Qt
-
-两种方式二选一，团队内保持一致：
-
-- **A（推荐，快）**：vcpkg `qtbase`，manifest 模式自动带出。
-- **B（稳定）**：官方在线安装器装 Qt 6.8 LTS MSVC2022 x64，CMake 里用 `CMAKE_PREFIX_PATH` 指向。
-
-选 B 时必须在 `CMakePresets.json` 里写死 `CMAKE_PREFIX_PATH` 的**相对占位**，本机实际路径放 `CMakeUserPresets.json`（gitignore）。
-
-## 6. 首次构建
+## 5. 首次构建（当前可用）
 
 ```powershell
-git clone git@github.com:XiaoliZhouCN/chroma-cms.git
+git clone git@github-shirley:XiaoliZhouCN/chroma-cms.git
 cd chroma-cms
 git checkout develop
 
@@ -98,22 +85,31 @@ cmake --build --preset windows-x64-debug
 ctest --preset windows-x64-debug --output-on-failure
 ```
 
-## 7. 日常命令
+生成物：`build/windows-x64-debug/Debug/ChromaCMS.exe`（windeployqt 已把 Qt DLL 拷到同目录）。
+
+## 6. 日常命令
 
 | 目的 | 命令 |
 |---|---|
+| 配置 | `cmake --preset windows-x64-debug` |
 | 构建 | `cmake --build --preset windows-x64-debug` |
 | 测试 | `ctest --preset windows-x64-debug --output-on-failure` |
-| 文档校验 | `scripts\check-docs.cmd` |
-| 生成色彩常量 | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gen-color-constants.ps1`（脚本待实现） |
-| 格式化 | `cmake --build --preset windows-x64-debug --target format` |
+| 文档门禁 | `scripts\check-docs.cmd` |
+| 生成色彩常量 | 待实现（M2） |
+| 打开工程 | `build\windows-x64-debug\ChromaCMS.sln` |
 
-## 8. 常见问题
+## 7. 已知限制
+
+- **M0–M1 保留控制台窗口**，日志直接可见；M6 前改为 WIN32 子系统。
+- 当前 `CompilerWarnings.cmake` **未启用 `/WX`**：Qt 6.11 头文件在 `/W4` 下仍有告警，待收敛后再开。
+- 测试里的 `app.selftest` 需要桌面会话（Windows 本机），CI 上不跑。
+
+## 8. 踩过的坑
 
 | 症状 | 原因 | 处置 |
 |---|---|---|
-| `GrDirectContext::MakeDirect3D` 链接失败 | Skia 未开 D3D12 后端 | 回 §3 检查 GN args，确认产物带 d3d 符号 |
-| 运行时报 `DXGI_ERROR_UNSUPPORTED` | 交换链格式/色彩空间不被支持 | 查 [ADR-0007](adr/0007-swapchain-format-and-color-space.md) 的降级策略 |
-| Qt 找不到平台插件 | DLL 未拷到输出目录 | 检查 CMake 的 `windeployqt` 步骤 |
-| 中文路径构建失败 | 工具链对非 ASCII 路径敏感 | 仓库与 `external/` 一律放 ASCII 路径 |
-| Skia 构建 OOM | 并行度过高 | `ninja -j 4` |
+| `CreateSwapChainForHwnd` 返回 `0x887A0001`（DXGI_ERROR_INVALID_CALL） | **D3D12 下第一个参数要传命令队列 `ID3D12CommandQueue`，不是 `ID3D12Device`**（D3D11 才传 device） | 先建 DIRECT 队列，再传队列指针 |
+| `cmake --build` 报 `AutoMoc subprocess error ... libuv process spawn failed: operation not permitted` | Agent 沙箱禁止以管道方式派生子进程，而 AUTOMOC 走 libuv | 在 Agent 环境构建需放宽沙箱；本机普通终端无此问题 |
+| MSVC 报 `文本后缀"鍚"无效` | 源文件含中文但未加 `/utf-8` | 所有 C++ 目标统一加 `/utf-8` |
+| `std::wprintf` 不是 `std` 成员（MSVC） | `<cstdio>` 不提供宽字符版本 | 用全局 `wprintf` 并 `#include <cwchar>` |
+| 中文路径构建失败 | 工具链对非 ASCII 路径敏感 | 仓库与依赖一律放 ASCII 路径 |

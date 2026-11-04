@@ -13,9 +13,9 @@ updated: 2026-11-04
 | 项 | 取值 | 备注 |
 |---|---|---|
 | 语言标准 | C++20 | 不用 C++23 特性（MSVC 支持不稳） |
-| 编译器 | MSVC 19.4x（VS 2022 17.10+） | 警告级别 `/W4 /permissive-`，警告视为错误 |
-| 构建 | CMake ≥ 3.28 + Ninja + CMake Presets | 见 [BUILD.md](BUILD.md) |
-| 依赖 | vcpkg manifest 模式（`vcpkg.json`） | 不手拷 DLL |
+| 编译器 | MSVC 19.5x（VS 2026 18.8） | 选项 `/W4 /permissive- /Zc:__cplusplus /utf-8`；`/WX` 待收敛后启用 |
+| 构建 | CMake 4.2 + CMake Presets（生成器 `Visual Studio 18 2026`） | 见 [BUILD.md](BUILD.md) |
+| 依赖 | 暂不引入包管理器；M4 引入 FFmpeg 时再定 | 不手拷 DLL |
 | 平台 | Windows x64 only | 显式拒绝其它平台 |
 
 ## 2. 目录与文件命名
