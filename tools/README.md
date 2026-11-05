@@ -28,6 +28,18 @@ python tools/gen_ptmr.py --no-csv
 
 产物说明见 [../assets/README.md](../assets/README.md)。
 
+## fetch-ffmpeg.ps1
+
+下载并解压 FFmpeg（BtbN `win64-lgpl-shared`）到 `external/ffmpeg`。
+
+```powershell
+pwsh tools/fetch-ffmpeg.ps1
+pwsh tools/fetch-ffmpeg.ps1 -Url <自定义 zip 地址>
+```
+
+产物布局：`include/` + `lib/` + `bin/*.dll` + `LICENSE.txt`；`external/` 已在 `.gitignore` 中。
+CMake 通过 `cmake/FindFFmpeg.cmake` 找它，详见 [../Docs/BUILD.md](../Docs/BUILD.md) §3.1。
+
 ## 约定
 
 1. 工具的输出**不直接入库**，只有被文档引用、被应用实际使用的那一份进 `assets/`。

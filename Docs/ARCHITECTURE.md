@@ -37,11 +37,12 @@ updated: 2026-11-04
 │     CPU 双精度参考实现（oracle，仅测试与生成常量表）            │
 ├──────────────────────────────────────────────────────────────┤
 │ L1  帧源                                                      │
-│     ImageSource(WIC) · VideoSource(FFmpeg) → FrameData        │
-│     + ColorMetadata(primaries/transfer/matrix/range)          │
+│     ImageLoader / VideoSource（均为 FFmpeg）→ FrameData        │
+│     + ColorMetadata(primaries/transfer/matrix/range, H.273)    │
 ├──────────────────────────────────────────────────────────────┤
 │ L0  平台                                                      │
 │     DXGI 交换链 · D3D12 设备 · HWND · SKIA_ROOT               │
+│     （macOS：CAMetalLayer · MTLDevice · NSView，待实现）       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +56,7 @@ updated: 2026-11-04
 | `src/render/` | 实现 `IRenderer`，管理两遍渲染与呈现 | `initialize/resize/present/shutdown` | 不做解码、不做颜色数学 |
 | `src/gfx/` | D3D12 薄封装：Device、Queue、SwapChain、Fence、PSO、DescriptorHeap | RAII 类，无业务语义 | 不做场景管理 |
 | `src/color/` | CPU 双精度参考实现、矩阵推导、常量化导出、ICC/显示配置读取 | 纯函数，可单测 | **不参与运行时呈现** |
-| `src/media/` | 图像/视频解码，产出 `FrameData` | `IImageSource` / `IVideoSource` | 不做颜色转换 |
+| `src/media/` | FFmpeg 解码（图像 + 视频），产出 `ImageData` / `FrameData` + `ColorMetadata` | `loadImage` / `IVideoSource` | 不做颜色转换 |
 | `shaders/` | HLSL 与 SkSL 两套实现 | 严格对齐 COLOR_SPEC | 不发明数学 |
 | `tests/` | 单测、黄金图、双后端一致性 | ctest | 不测 UI |
 | `scripts/` | 文档校验、常量生成、构建辅助 | 退出码即门禁 | — |
@@ -142,5 +143,19 @@ public:
 - 不做图像编辑与导出（只读显示）；
 - 不做多窗口 / 多视口；
 - 不做音频播放与音画同步；
-- 不做通用 effect graph 或节点编辑器；
-- 不追求跨平台（D3D12 是硬约束，Windows only）。
+- 不做通用 effect graph 或节点编辑器。
+
+## 9. 平台矩阵
+
+多平台从 [ADR-0009](adr/0009-multi-platform-support.md) 起成为需求（早期版本写的是"D3D12 硬约束，Windows only"，已作废）。
+
+| 层 | Windows | macOS |
+|---|---|---|
+| 解码 | FFmpeg | FFmpeg（相同） |
+| 原生渲染 | D3D12 | **Metal（待实现）** |
+| Skia 渲染 | Ganesh D3D12（M3） | Ganesh/Graphite Metal（M3 之后） |
+| 窗口宿主 | `QWidget` + HWND | `QWidget` + `NSView` / `CAMetalLayer` |
+| 显示配置 | WCS / ICC（M5） | ColorSync / `NSColorSpace`（M5） |
+| 一致性门禁 | 双后端像素比对 | 与黄金图比对（跨设备比对无意义） |
+
+约束：**`IRenderer` 不得出现平台图形 API 类型**；平台实现由 CMake 按 `CMAKE_SYSTEM_NAME` 选择源文件。

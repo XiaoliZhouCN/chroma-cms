@@ -14,6 +14,9 @@ compile_commands.json
 /third_party/
 /.skia/
 
+# 外部预编译依赖（FFmpeg 等）。用 tools/fetch-ffmpeg.ps1 复原，不入库。
+/external/
+
 # ---- 工具缓存 ----
 /.cache/
 /node_modules/

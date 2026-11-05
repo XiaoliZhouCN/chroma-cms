@@ -2,7 +2,7 @@
 
 #include "app/ViewportWidget.h"
 #include "core/Version.h"
-#include "media/ImageSource.h"
+#include "media/ImageData.h"
 
 #include <QFileInfo>
 #include <QLabel>
@@ -67,7 +67,19 @@ void MainWindow::refreshStatus(const QString& backend)
                                  : QString());
     }
 
-    m_status->setText(QStringLiteral("%1　|　后端：%2").arg(imageText, backend));
+    QString colorText = QStringLiteral("色彩：—");
+    if (m_image) {
+        const media::ColorMetadata& color = m_image->color;
+        colorText = QStringLiteral("色彩：%1 / %2 / %3 / %4（%5）")
+                        .arg(QString::fromUtf8(media::colorPrimariesName(color.primaries)),
+                             QString::fromUtf8(media::colorTransferName(color.transfer)),
+                             QString::fromUtf8(media::colorMatrixName(color.matrix)),
+                             QString::fromUtf8(media::colorRangeName(color.range)),
+                             QString::fromStdString(color.source.empty() ? "none" : color.source));
+    }
+
+    m_status->setText(
+        QStringLiteral("%1　|　%2　|　后端：%3").arg(imageText, colorText, backend));
     statusBar()->showMessage(QStringLiteral("M1：D3D12 原生路径显示静态图（未做色彩管理）"));
 }
 

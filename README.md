@@ -24,20 +24,20 @@ updated: 2026-11-04
 | 层 | 选择 | 记录 |
 |---|---|---|
 | 窗口 / UI | Qt 6.11 Widgets，自绘 `QWidget` 承载原生表面 | [ADR-0002](Docs/adr/0002-qt-widgets-native-surface.md) |
-| 图形 API | D3D12 原生 / Skia Ganesh D3D12 | [ADR-0003](Docs/adr/0003-dual-render-backend.md) |
+| 图形 API | Windows：D3D12 原生 / Skia D3D12 · macOS：Metal 原生 / Skia Metal（待实现） | [ADR-0003](Docs/adr/0003-dual-render-backend.md)、[ADR-0009](Docs/adr/0009-multi-platform-support.md) |
 | 色彩管理 | 自研 HLSL / SkSL，CPU 双精度参考实现作 oracle | [ADR-0004](Docs/adr/0004-self-implemented-color-management.md) |
-| 视频解码 | FFmpeg（读取原始色彩元数据） | [ADR-0005](Docs/adr/0005-ffmpeg-for-video-decode.md) |
+| 解码 | FFmpeg（图像 + 视频，读取原始色彩元数据） | [ADR-0005](Docs/adr/0005-ffmpeg-for-video-decode.md)、[ADR-0008](Docs/adr/0008-unified-ffmpeg-decoding.md) |
 | 构建 | CMake 4.2 + VS 2026 生成器；Skia 源码构建（M3 前置） | [ADR-0006](Docs/adr/0006-cmake-vcpkg-source-built-skia.md) |
-| 平台 | Windows 10/11 x64，D3D12 特性等级 ≥ 12_0（本机 Intel UHD 为 12_1） | — |
+| 平台 | Windows 10/11 x64（已跑通）· macOS（规划中） | [ADR-0009](Docs/adr/0009-multi-platform-support.md) |
 
 ## 当前状态
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **M0 完成**：构建骨架 + 空窗口 + 测试链路（尚无渲染代码），下一步 M1 |
+| 阶段 | **M1 进行中**：D3D12 原生路径已能显示 PTMR 测试图（未做色彩管理） |
 | 日常分支 | `develop` |
 | 默认分支 | `main`（**保持为空**，仅作为占位） |
-| 下一步 | 见 [Docs/ROADMAP.md](Docs/ROADMAP.md) 的 M1 出口条件 |
+| 下一步 | 见 [Docs/ROADMAP.md](Docs/ROADMAP.md) 的 M1 收尾与 M2 色彩管线 |
 
 ## 从哪读起
 
@@ -50,16 +50,18 @@ updated: 2026-11-04
 
 ```
 src/app/        Qt 外壳：窗口、菜单、状态栏、原生表面宿主
-src/render/     渲染后端：IRenderer + D3D12 原生 + Skia D3D12
+src/render/     渲染后端：IRenderer + D3D12Renderer（+ Skia / Metal 待加）
 src/gfx/        D3D12 薄封装：设备、队列、交换链、fence、PSO
-src/color/      CPU 参考实现（双精度）：传输函数、矩阵、ICC、显示配置
-src/media/      图像 / 视频源：WIC、FFmpeg，输出 FrameData + ColorMetadata
-shaders/hlsl/   原生后端着色器
-shaders/sksl/   Skia 后端着色器
+src/media/      FFmpeg 解码：图像 / 视频 → ImageData + ColorMetadata
+src/core/       无平台依赖的基础层（版本、通用工具）
+shaders/        HLSL（原生后端）；SkSL / MSL 后续加入
 tests/          单元测试、黄金图、双后端一致性测试
+assets/         测试素材（PTMR 测试图，自生成）
+tools/          离线工具（测试图生成、依赖获取）
+external/       外部预编译依赖（FFmpeg，gitignore）
 Docs/           文档（见 INDEX）
 instruments/    测量工件说明（不入库大文件）
-scripts/        校验脚本
+scripts/        文档校验脚本
 ```
 
 ## 协作

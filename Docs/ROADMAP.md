@@ -17,7 +17,7 @@ updated: 2026-11-04
 - [x] `CMakeLists.txt` + `CMakePresets.json` + `cmake/` 辅助可用
 - [x] 空窗口启动成功（`app.selftest` 通过，原生 HWND 已打印）
 - [x] `ctest` 有可运行的用例（`unit.smoke` + `app.selftest`）
-- [→] Skia D3D12 源码构建：**移出 M0**，改为 M3 的前置任务（见 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)、[BUILD.md](BUILD.md) §4）
+- [→] Skia D3D12 源码构建：**移出 M0**，改为 M3 的前置任务（见 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)、[BUILD.md](BUILD.md) §3.3）
 - [✗] `vcpkg.json`：M0–M3 都不需要（Qt 已在本地、FFmpeg 到 M4 才引入），不建
 
 ## M1：原生 D3D12 显示静态图（进行中）
@@ -27,6 +27,7 @@ updated: 2026-11-04
 - [x] DXGI 交换链（FLIP_DISCARD）、命令队列、fence 双帧在飞
 - [x] `QWidget` 原生表面宿主（`WA_NativeWindow` + `WA_OpaquePaintEvent`）
 - [x] WIC 解码 PNG（含 `value16 = code10 << 6` 存储约定的还原）→ 上传 R16G16B16A16_UNORM 纹理
+  - 已改为 **FFmpeg 解码**（[ADR-0008](adr/0008-unified-ffmpeg-decoding.md)），并解析 PNG `cICP` 得到色彩元数据
 - [x] 全屏三角形 + contain-fit 采样，输出到 `R10G10B10A2_UNORM` 交换链
 - [x] 处理 DPI 缩放（`devicePixelRatio` → 物理像素，本机 1.25）
 - [x] 用 `assets/test-images` 的 PTMR 测试图上屏（人工目视确认）
@@ -59,7 +60,7 @@ updated: 2026-11-04
 
 ## M3：Skia D3D12 后端 + 双后端一致性
 
-**前置**：完成 Skia 源码构建（`skia_use_direct3d=true`），见 [BUILD.md](BUILD.md) §4 与 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)。**这是本项目唯一的长周期依赖，需提前排期。**
+**前置**：完成 Skia 源码构建（`skia_use_direct3d=true`），见 [BUILD.md](BUILD.md) §3.3 与 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)。**这是本项目唯一的长周期依赖，需提前排期。**
 
 **目标**：同一套数学在 Skia 上复现，并证明等价。
 
@@ -111,15 +112,36 @@ updated: 2026-11-04
 
 **出口条件**：由 HDR ADR 定义（尚未编写）。
 
+## M7：macOS 移植（未排期，依赖 macOS 环境）
+
+见 [ADR-0009](adr/0009-multi-platform-support.md)。
+
+- CMake：`macos-arm64-*` preset + 按平台选择源文件
+- 原生 **Metal** 后端（`CAMetalLayer` + `MTLDevice`）
+- Skia Metal 后端
+- 显示配置：ColorSync / `NSColorSpace`
+- 门禁改为"与黄金图比对"（窗口移植没有 D3D12 参照）
+
+**出口条件**
+
+- macOS 上打开 PTMR 测试图，ramp 顺序与灰阶方向正确
+- `IRenderer` 在两端零平台类型泄漏（`#include <d3d12.h>` 仅出现在 `src/gfx`）
+- 解码与色彩数学代码在两端**完全共享**，无 `#ifdef` 分叉
+
+> **前置条件**：需要一台 macOS 机器或可用 CI。当前开发机无法构建/验证 Metal，
+> 因此在具备环境前**不写未经验证的 Metal 代码**。
+
 ## 待决问题
 
 | # | 问题 | 影响 | 状态 |
 |---|---|---|---|
 | Q1 | 交换链用 10-bit SDR 还是 scRGB 16F | 决定 ADR-0007 与 Pass 2 输出 | **已实测**：本机 `R10G10B10A2_UNORM` + `RGB_FULL_G22_NONE_P709` 支持；16F 仅支持 scRGB。见 [ADR-0007](adr/0007-swapchain-format-and-color-space.md) |
 | Q2 | Skia 能否直接 wrap 交换链后台缓冲为 `SkSurface` | 决定 M3 的呈现路径 | 待验证 |
-| Q3 | Qt 走 vcpkg 还是官方安装器 | 决定 BUILD §5 的默认路径 | 待定 |
+| Q3 | Qt 走 vcpkg 还是官方安装器 | 决定 BUILD §3.2 的默认路径 | 待定 |
 | Q4 | 是否需要多显示器同时渲染 | 影响 L0 的设备/交换链管理 | 待定 |
 | Q5 | 视频播放是否需要音频 | 影响线程模型与时钟 | 待定（当前假设：不需要） |
 | Q6 | 黄金图是否引入 Git LFS | 影响仓库体积 | 待定（当前假设：合成图 < 200 KB，不用 LFS） |
+| Q7 | macOS 的交换链/色彩空间策略 | 对应 ADR-0007 的 mac 版本 | 待 macOS 环境 |
+| Q8 | Metal 代码如何验证（本机 / CI / 借机） | 决定 M7 能否开工 | **阻塞中**：当前无 macOS 环境 |
 
 新问题直接加进本表，不要只在聊天里讨论——聊天结论会丢。

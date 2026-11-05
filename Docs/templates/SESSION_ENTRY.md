@@ -67,7 +67,7 @@ updated: 2026-11-04
 2. vcpkg 的 ffmpeg 端口首次安装耗时约 25 分钟，CI 需要缓存。
 
 **踩坑**
-- vcpkg 与 VS 的 CRT 不一致导致链接报 LNK2038。原因：`VCPKG_CRT_LINKAGE` 默认 dynamic 而本地 preset 写了 /MT。处置：统一 `/MD`，写入 BUILD.md §8。
+- vcpkg 与 VS 的 CRT 不一致导致链接报 LNK2038。原因：`VCPKG_CRT_LINKAGE` 默认 dynamic 而本地 preset 写了 /MT。处置：统一 `/MD`，写入 BUILD.md §7。
 
 **下次第一件事**：写 `scripts/build-skia.ps1`，用 `skia_use_direct3d=true` 构建并记录实际产物名。
 ```

@@ -51,6 +51,8 @@ updated: 2026-11-04
 | [0005](adr/0005-ffmpeg-for-video-decode.md) | 视频解码选 FFmpeg | accepted |
 | [0006](adr/0006-cmake-vcpkg-source-built-skia.md) | CMake + vcpkg + 源码构建 Skia | accepted |
 | [0007](adr/0007-swapchain-format-and-color-space.md) | 交换链格式与色彩空间 | **proposed** |
+| [0008](adr/0008-unified-ffmpeg-decoding.md) | 图像与视频统一用 FFmpeg 解码 | accepted |
+| [0009](adr/0009-multi-platform-support.md) | 多平台支持（macOS + 原生 Metal） | accepted（Metal 待实现） |
 
 模板：[adr/TEMPLATE.md](adr/TEMPLATE.md)
 

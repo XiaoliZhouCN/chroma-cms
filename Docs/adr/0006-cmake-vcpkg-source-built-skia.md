@@ -59,5 +59,5 @@ updated: 2026-11-04
 
 ## 参考
 
-- [../BUILD.md](../BUILD.md) §3
+- [../BUILD.md](../BUILD.md) §3.3
 - Skia `gn` 构建文档

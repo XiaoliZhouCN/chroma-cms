@@ -1,6 +1,6 @@
 #include "render/D3D12Renderer.h"
 
-#include "media/ImageSource.h"
+#include "media/ImageData.h"
 
 #include <d3dcompiler.h>
 

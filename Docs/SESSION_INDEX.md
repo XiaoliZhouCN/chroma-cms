@@ -17,6 +17,7 @@ updated: 2026-11-04
 | 001 | 2026-11-04 | 建立文档框架与仓库基线 | AGENTS/README/INDEX/ARCHITECTURE/CONVENTIONS/BUILD/COLOR_MANAGEMENT/COLOR_SPEC/TESTING/ROADMAP/AGENT_WORKFLOW；ADR-0001~0007；`check-docs.ps1`；git 初始化到 `develop` | Skia 构建参数未实测（BUILD §3 四项待验证）；ADR-0007 仍是 proposed；Q2（Skia 能否 wrap 交换链后台缓冲）未验证 | 落 M0 剩余出口：`CMakeLists.txt` + `CMakePresets.json` + `vcpkg.json`，跑通空窗口 |
 | 002 | 2026-11-04 | M0 构建骨架 + 空窗口 | `CMakeLists.txt`/`CMakePresets.json`/`cmake/`；`src/core`、`src/app`（MainWindow/ViewportWidget）；`tests`（unit.smoke、app.selftest）；BUILD 按实测环境重写；ADR-0007 补实测 | Skia 构建未做（改为 M3 前置）；Agent 沙箱无法跑 AUTOMOC；`/WX` 未启用 | M1：`IRenderer` + D3D12 设备/队列/交换链，画出第一张纯色图 |
 | 003 | 2026-11-05 | 迁入 HDR 测试图；M1 上屏 | `tools/gen_ptmr.py`、`assets/test-images/*`（主图+预览+CSV）、`src/gfx`、`src/media`、`src/render`、`shaders/image.hlsl`；CMake 按模块拆分；D3D12 成功显示 PTMR 图 | resize/拖拽未验证；`ReportLiveObjects` 未做；HLSL 运行时编译待改；色彩管线（M2）未开始 | M1 收尾：加泄漏检查 + resize 验证，然后进 M2 |
+| 004 | 2026-11-05 | 多平台需求：解码切 FFmpeg + 记 macOS 决策 | `cmake/FindFFmpeg.cmake`、`tools/fetch-ffmpeg.ps1`、`src/media/{ImageData.h,ImageLoader.*}`（删除 WIC）；ADR-0008/0009；BUILD 重构为外部依赖章节 | Metal 未实现（无 macOS 环境）；`Docs/LICENSES.md` 未建；`external/` 未入库需 fetch | M2：CPU 双精度参考实现 + COLOR_SPEC §8 锚点测试 |
 
 ## 详细记录
 
@@ -129,4 +130,48 @@ updated: 2026-11-04
 - 用 PowerShell 的 `Start-Process` 起 GUI 程序时，子进程继承了 Agent 工具的输出管道，导致工具调用一直不返回 → 必须重定向子进程 stdout/stderr 到文件。
 
 **下次第一件事**：M1 收尾——加 `ReportLiveObjects` 退出检查，并手动验证 resize/最大化；然后进 M2 色彩管线（CPU 参考实现 + SPEC §8 锚点测试先行）。
+
+### 004 · 2026-11-05 · 多平台需求：解码切 FFmpeg
+
+**目标**：为 macOS 需求统一解码路径，并把平台决策落成文档。
+
+**决策**
+
+- **图像与视频统一用 FFmpeg**（[ADR-0008](adr/0008-unified-ffmpeg-decoding.md)），删除 WIC 路径。
+  理由：WIC 与 ImageIO 拿不到一致的色彩元数据；ImageIO 还会隐式做色彩转换（违反 ADR-0004）。
+- **元数据以容器为准**：自写 PNG chunk 解析读 `cICP`，覆盖 `AVFrame` 的 `color_*` 字段。
+- **依赖用预编译包**（BtbN `win64-lgpl-shared`，FFmpeg n9.0.1），`external/` 不入库，
+  由 `tools/fetch-ffmpeg.ps1` 复原。
+- **macOS 每个平台都做两条路径**（原生 Metal + Skia Metal），见
+  [ADR-0009](adr/0009-multi-platform-support.md)；一致性门禁只在 Windows 上跑。
+
+**产出**
+
+- `cmake/FindFFmpeg.cmake`（imported target `FFmpeg::FFmpeg`）、`tools/fetch-ffmpeg.ps1`
+- `src/media/ImageData.h`、`ImageLoader.{h,cpp}`（FFmpeg 实现）；删除 `ImageSource.{h,cpp}`
+- `README` / `BUILD` / `ARCHITECTURE` / `ROADMAP` / `CONVENTIONS` 同步更新
+- ADR-0008（统一解码）、ADR-0009（多平台）
+
+**验证**
+
+- 构建通过；`ctest` 2/2
+- 运行日志：`[media] 色彩元数据( cICP ): primaries= BT.2020 transfer= PQ matrix= Identity(RGB) range= full`
+  —— PNG 的 `cICP` 被正确读出，色彩管线（M2）现在有输入了
+- **像素等价**：切换解码器前后，同一张图的屏幕截图 **SHA-256 完全相同**
+  （`a9a7384b…`），证明 FFmpeg 路径与 WIC 路径输出一致，没有引入隐式转换
+
+**未决 / 风险**
+
+1. **Metal 未实现**：当前无 macOS 环境，写未验证的 Metal 代码不可接受（ROADMAP Q8 阻塞中）。
+2. `Docs/LICENSES.md` 未建；FFmpeg 的 LGPL 义务（动态链接、随包许可、可替换）尚未成文。
+3. `external/` 不入库，新机器必须记得先跑 fetch 脚本，否则 configure 直接失败（已给出明确报错）。
+4. 解码层只处理首帧；视频时间轴、seek、硬件解码仍属 M4。
+
+**踩坑**
+
+- FFmpeg 头文件**不自己声明 `extern "C"`**，直接 include 会得到 22 个带 C++ 修饰名的 `LNK2019`。必须整体包 `extern "C"`。
+- `avcodec-63.dll` 依赖 `swresample-7.dll`，少拷一个就是启动即 `0xC0000135`。POST_BUILD 改为拷 `bin/*.dll`。
+- 上一轮用 PowerShell 的 `Get-Content/Set-Content` 改文件把中文写坏过；本轮所有编辑都走编辑工具，未再复现。
+
+**下次第一件事**：M2 —— 先写 `src/color/` 的 CPU 双精度参考实现，把 [COLOR_SPEC.md](COLOR_SPEC.md) §8 的 A1–A8 做成 `ctest -R color`，再动 HLSL。
 

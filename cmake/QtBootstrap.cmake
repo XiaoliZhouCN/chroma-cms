@@ -3,7 +3,7 @@
 # 优先使用显式传入的 -DQT_ROOT=<path>。
 # 否则扫描常见安装位置，取版本号最大的一个（Natural 排序，6.11 > 6.9）。
 #
-# 规则来源：Docs/BUILD.md §5。本机路径不写进 CMakePresets.json。
+# 规则来源：Docs/BUILD.md §3.2。本机路径不写进 CMakePresets.json。
 
 if(NOT QT_ROOT)
     set(_chroma_qt_globs

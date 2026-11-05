@@ -1,6 +1,6 @@
 #include "app/ViewportWidget.h"
 
-#include "media/ImageSource.h"
+#include "media/ImageData.h"
 #include "render/D3D12Renderer.h"
 
 #include <QColor>

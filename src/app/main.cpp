@@ -1,15 +1,13 @@
 #include "app/MainWindow.h"
 
 #include "core/Version.h"
-#include "media/ImageSource.h"
+#include "media/ImageLoader.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDebug>
 #include <QFileInfo>
 #include <QTimer>
-
-#include <objbase.h>
 
 #include <memory>
 #include <string>
@@ -29,9 +27,6 @@ int main(int argc, char** argv)
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("ChromaCMS"));
     QApplication::setOrganizationName(QStringLiteral("ChromaCMS"));
-
-    // WIC 需要 COM；Qt 可能已经初始化过，重复调用返回 S_FALSE，无害。
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral(
@@ -58,9 +53,16 @@ int main(int argc, char** argv)
         std::string error;
         if (chroma::media::loadImage(imagePath.toStdWString(), *loaded, error)) {
             image = loaded;
+            const auto& c = image->color;
             qInfo().noquote() << "[media] 载入图像:" << imagePath << image->width << "x"
                               << image->height << " 源位深" << image->sourceBitDepth
                               << (image->reinterpretedFrom10Bit ? "(10-bit 还原)" : "");
+            qInfo().noquote() << "[media] 色彩元数据(" << QString::fromStdString(c.source)
+                              << "): primaries="
+                              << chroma::media::colorPrimariesName(c.primaries)
+                              << " transfer=" << chroma::media::colorTransferName(c.transfer)
+                              << " matrix=" << chroma::media::colorMatrixName(c.matrix)
+                              << " range=" << chroma::media::colorRangeName(c.range);
         }
         else {
             qCritical().noquote() << "[media] 载入失败:" << QString::fromStdString(error);
@@ -78,6 +80,5 @@ int main(int argc, char** argv)
     }
 
     const int result = QApplication::exec();
-    CoUninitialize();
     return result;
 }
