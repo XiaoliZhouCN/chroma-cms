@@ -20,20 +20,25 @@ updated: 2026-11-04
 - [→] Skia D3D12 源码构建：**移出 M0**，改为 M3 的前置任务（见 [ADR-0006](adr/0006-cmake-vcpkg-source-built-skia.md)、[BUILD.md](BUILD.md) §4）
 - [✗] `vcpkg.json`：M0–M3 都不需要（Qt 已在本地、FFmpeg 到 M4 才引入），不建
 
-## M1：原生 D3D12 显示静态图（sRGB 直通）
+## M1：原生 D3D12 显示静态图（进行中）
 
 **目标**：把呈现链路跑通——**先不做颜色管理**，只证明"能看到一张正确的图"。
 
-- DXGI 交换链（FLIP_DISCARD）、命令队列、fence 双帧在飞
-- `QWidget` 原生表面宿主（`WA_NativeWindow` + `WA_OpaquePaintEvent`）
-- WIC 解码 PNG → 上传纹理 → 全屏 quad → Present
-- 处理 DPI 缩放（`devicePixelRatio` → 物理像素）
+- [x] DXGI 交换链（FLIP_DISCARD）、命令队列、fence 双帧在飞
+- [x] `QWidget` 原生表面宿主（`WA_NativeWindow` + `WA_OpaquePaintEvent`）
+- [x] WIC 解码 PNG（含 `value16 = code10 << 6` 存储约定的还原）→ 上传 R16G16B16A16_UNORM 纹理
+- [x] 全屏三角形 + contain-fit 采样，输出到 `R10G10B10A2_UNORM` 交换链
+- [x] 处理 DPI 缩放（`devicePixelRatio` → 物理像素，本机 1.25）
+- [x] 用 `assets/test-images` 的 PTMR 测试图上屏（人工目视确认）
 
 **出口条件**
 
-- 打开一张 8-bit sRGB PNG，与 Windows 照片查看器目视一致
-- 窗口缩放、拖动、最大化无撕裂、无崩溃
-- 关闭时无 D3D12 对象泄漏（Debug Layer 无报告）
+- [x] 打开测试图，ramp 顺序与灰阶方向正确（灰→红→绿→蓝→青→黄→品→灰，左暗右亮）
+- [ ] 窗口缩放、拖动、最大化无撕裂、无崩溃 ← **待验证**
+- [ ] 关闭时无 D3D12 对象泄漏（`IDXGIDebug::ReportLiveObjects` 无报告）← **待实现**
+
+> 注：M1 明确**不做色彩管理**——PQ 码值被当作 sRGB 编码直接送显，观感等同于 8-bit 预览图。
+> 这是有意的阶段性结果，见 [COLOR_MANAGEMENT.md](COLOR_MANAGEMENT.md) §3。
 
 ## M2：自研色彩管线（SDR）
 

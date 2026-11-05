@@ -60,6 +60,9 @@ updated: 2026-11-04
 |---|---|
 | [adr/AGENTS.md](adr/AGENTS.md) | ADR 目录的追加规则（追加式、不可改） |
 | [templates/SESSION_ENTRY.md](templates/SESSION_ENTRY.md) | 会话记录模板 |
+| [../assets/README.md](../assets/README.md) | 测试素材的规格、来源与校验哈希 |
+| [../tools/README.md](../tools/README.md) | 离线生成工具（PTMR 测试图） |
+| [../instruments/README.md](../instruments/README.md) | 测量工件目录约定 |
 
 ## 5. 维护规则
 

@@ -16,6 +16,7 @@ updated: 2026-11-04
 |---|---|---|---|---|---|
 | 001 | 2026-11-04 | 建立文档框架与仓库基线 | AGENTS/README/INDEX/ARCHITECTURE/CONVENTIONS/BUILD/COLOR_MANAGEMENT/COLOR_SPEC/TESTING/ROADMAP/AGENT_WORKFLOW；ADR-0001~0007；`check-docs.ps1`；git 初始化到 `develop` | Skia 构建参数未实测（BUILD §3 四项待验证）；ADR-0007 仍是 proposed；Q2（Skia 能否 wrap 交换链后台缓冲）未验证 | 落 M0 剩余出口：`CMakeLists.txt` + `CMakePresets.json` + `vcpkg.json`，跑通空窗口 |
 | 002 | 2026-11-04 | M0 构建骨架 + 空窗口 | `CMakeLists.txt`/`CMakePresets.json`/`cmake/`；`src/core`、`src/app`（MainWindow/ViewportWidget）；`tests`（unit.smoke、app.selftest）；BUILD 按实测环境重写；ADR-0007 补实测 | Skia 构建未做（改为 M3 前置）；Agent 沙箱无法跑 AUTOMOC；`/WX` 未启用 | M1：`IRenderer` + D3D12 设备/队列/交换链，画出第一张纯色图 |
+| 003 | 2026-11-05 | 迁入 HDR 测试图；M1 上屏 | `tools/gen_ptmr.py`、`assets/test-images/*`（主图+预览+CSV）、`src/gfx`、`src/media`、`src/render`、`shaders/image.hlsl`；CMake 按模块拆分；D3D12 成功显示 PTMR 图 | resize/拖拽未验证；`ReportLiveObjects` 未做；HLSL 运行时编译待改；色彩管线（M2）未开始 | M1 收尾：加泄漏检查 + resize 验证，然后进 M2 |
 
 ## 详细记录
 
@@ -87,4 +88,45 @@ updated: 2026-11-04
 - 用 PowerShell 5.1 的 `Get-Content -Raw` + `Set-Content` 改中文源文件会把 UTF-8 读成 ANSI 并写坏；**改文件一律走编辑工具，不用 shell 重写**。
 
 **下次第一件事**：M1 —— 建 `src/gfx/` 的 Device/Queue/SwapChain/Fence 薄封装与 `IRenderer`，在 `ViewportWidget` 上画出第一张纯色图，并用调试层确认零对象泄漏。
+
+### 003 · 2026-11-05 · 迁入 HDR 测试图 + M1 上屏
+
+**目标**：把 HDR 测试图与生成工具迁进仓库，并用 D3D12 把这张图显示到屏幕上（暂不做色彩管理）。
+
+**决策**
+
+- 工具放 `tools/`、产物放 `assets/test-images/`，与 [CONVENTIONS §7](CONVENTIONS.md) 的资源约定一致；生成器的 `--out` 由命令行控制，不改脚本逻辑。
+- **M1 不做任何颜色转换**：PQ 码值原样送进 `R10G10B10A2_UNORM` 交换链，观感等同 8-bit 预览图。这是阶段性结果，不是缺陷。
+- 加载时**还原存储约定**（`value16 = code10 << 6` → 按 `code/1023` 归一化），否则满量程处会差 1 个码值（9.6e-4）。
+- HLSL 暂时**运行时编译**（`D3DCompileFromFile`），优先迭代速度；M2 再决定是否改离线产物。
+- `src/` 按架构分层拆成 `chroma_gfx`（头文件）/ `chroma_media` / `chroma_render` 三个目标。
+
+**产出**
+
+- `tools/gen_ptmr.py`、`tools/README.md`
+- `assets/test-images/`：主图（16-bit PNG）、8-bit 预览、CSV 对照表、`assets/README.md`
+- `src/gfx/D3D12Common.h`、`src/media/ImageSource.{h,cpp}`、`src/render/IRenderer.h`、`src/render/D3D12Renderer.{h,cpp}`
+- `shaders/image.hlsl`（全屏三角形 + contain-fit 采样）
+- `ViewportWidget` 接 `IRenderer`；`MainWindow` 状态栏显示图像与后端信息；`main` 支持 `--image` / `--selftest`
+
+**验证**
+
+- 构建通过（VS2026 / MSVC 19.51）
+- 启动日志：`[media] 载入图像 … 源位深 16 (10-bit 还原)`；`[gfx] backend = D3D12 (native) swapchain = 1600 x 975 dpr = 1.25`
+- **截图确认**：窗口内显示 8 条 ramp（灰→红→绿→蓝→青→黄→品→灰），左暗右亮，方形图左右留边居中——与预期一致
+
+**未决 / 风险**
+
+1. 窗口 resize / 拖动 / 最大化未系统验证（`ResizeBuffers` 代码路径已写，但没跑过）。
+2. 未调用 `IDXGIDebug::ReportLiveObjects`，D3D12 对象泄漏未检查。
+3. `dpr = 1.25` 下物理像素与逻辑像素的换算只在本机验证过。
+4. 色彩管线（M2）尚未开始；`COLOR_SPEC.md` 的锚点测试也还没有对应代码。
+
+**踩坑**
+
+- `std::shared_ptr` 被 `std::move` 后继续解引用 → 进程启动即 `0xC0000005`，且控制台没有任何输出。教训：崩溃点在第一个日志之前时，先怀疑"刚 move 过什么"。
+- 10-bit 判定最初检查了所有通道，但 WIC 的 alpha 恒为 `0xFFFF`（低 6 位 = `0x3F`），使判据永假 → 只检查 RGB。
+- 用 PowerShell 的 `Start-Process` 起 GUI 程序时，子进程继承了 Agent 工具的输出管道，导致工具调用一直不返回 → 必须重定向子进程 stdout/stderr 到文件。
+
+**下次第一件事**：M1 收尾——加 `ReportLiveObjects` 退出检查，并手动验证 resize/最大化；然后进 M2 色彩管线（CPU 参考实现 + SPEC §8 锚点测试先行）。
 

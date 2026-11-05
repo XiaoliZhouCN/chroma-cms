@@ -109,19 +109,23 @@ struct FrameData {
     int64_t ptsUs;
 };
 
-// src/render/IRenderer.h
+// src/render/IRenderer.h  （M1 实际形态）
 class IRenderer {
 public:
     virtual ~IRenderer() = default;
-    virtual bool initialize(HWND hwnd, uint32_t w, uint32_t h) = 0;
-    virtual void resize(uint32_t w, uint32_t h) = 0;
-    virtual void present(const FrameData& frame,
-                         const DisplayProfile& target) = 0;
-    virtual BackendKind kind() const = 0;
+    // nativeWindow 是 HWND；width/height 为物理像素（已乘 devicePixelRatio）
+    virtual bool initialize(void* nativeWindow, uint32_t width, uint32_t height) = 0;
+    virtual void resize(uint32_t width, uint32_t height) = 0;
+    virtual void setImage(const media::ImageData& image) = 0;  // M1：静态图
+    virtual void present() = 0;
+    virtual const char* backendName() const = 0;
 };
 ```
 
 约束：`IRenderer` 不暴露任何 D3D12 类型，Qt 层不得直接 `#include <d3d12.h>`。
+
+**演进**：M4 引入视频后，`setImage` 会被 `submitFrame(const FrameData&)` 取代，`present()` 保持无参。
+接口变更必须同步 ADR 与 [COLOR_SPEC.md](COLOR_SPEC.md) 的调用顺序约定。
 
 ## 7. 线程模型
 

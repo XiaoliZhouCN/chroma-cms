@@ -2,7 +2,9 @@
 
 #include "app/ViewportWidget.h"
 #include "core/Version.h"
+#include "media/ImageSource.h"
 
+#include <QFileInfo>
 #include <QLabel>
 #include <QStatusBar>
 
@@ -10,27 +12,63 @@
 
 namespace chroma::app {
 
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(std::shared_ptr<const media::ImageData> image, QString imagePath,
+                       QWidget* parent)
     : QMainWindow(parent)
+    , m_image(std::move(image))
+    , m_imagePath(std::move(imagePath))
 {
-    const QString title = QStringLiteral("%1 %2 — M0")
-                              .arg(QString::fromStdString(std::string(kAppName)))
-                              .arg(QString::fromStdString(std::string(kVersion)));
-    setWindowTitle(title);
+    setWindowTitle(QStringLiteral("%1 %2 — M1 · D3D12")
+                       .arg(QString::fromStdString(std::string(kAppName)))
+                       .arg(QString::fromStdString(std::string(kVersion))));
 
     m_viewport = new ViewportWidget(this);
     setCentralWidget(m_viewport);
 
     buildStatusBar();
-    resize(1280, 720);
+
+    connect(m_viewport, &ViewportWidget::rendererReady, this,
+            [this](const QString& backend) {
+                m_backend = backend;
+                refreshStatus(m_backend);
+            });
+    connect(m_viewport, &ViewportWidget::rendererFailed, this, [this](const QString& message) {
+        m_backend = QStringLiteral("失败");
+        refreshStatus(m_backend);
+        statusBar()->showMessage(QStringLiteral("渲染初始化失败：%1").arg(message), 0);
+    });
+
+    if (m_image) {
+        m_viewport->setImage(m_image);
+    }
+
+    resize(1280, 800);
 }
 
 void MainWindow::buildStatusBar()
 {
     m_status = new QLabel(this);
-    m_status->setText(QStringLiteral("后端：D3D12（未接入）　|　色彩管理：未接入"));
     statusBar()->addPermanentWidget(m_status);
-    statusBar()->showMessage(QStringLiteral("M0：原生表面宿主就绪"));
+    refreshStatus(m_backend);
+}
+
+void MainWindow::refreshStatus(const QString& backend)
+{
+    QString imageText = QStringLiteral("图像：未加载");
+    if (m_image) {
+        const QFileInfo info(m_imagePath);
+        imageText = QStringLiteral("图像：%1  %2×%3  %4-bit%5")
+                        .arg(info.fileName())
+                        .arg(m_image->width)
+                        .arg(m_image->height)
+                        .arg(m_image->sourceBitDepth)
+                        .arg(m_image->reinterpretedFrom10Bit
+                                 ? QStringLiteral("（10-bit 码已还原到满量程）")
+                                 : QString());
+    }
+
+    m_status->setText(QStringLiteral("%1　|　后端：%2").arg(imageText, backend));
+    statusBar()->showMessage(QStringLiteral("M1：D3D12 原生路径显示静态图（未做色彩管理）"));
 }
 
 } // namespace chroma::app

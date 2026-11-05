@@ -103,6 +103,9 @@ ctest --preset windows-x64-debug --output-on-failure
 - **M0–M1 保留控制台窗口**，日志直接可见；M6 前改为 WIN32 子系统。
 - 当前 `CompilerWarnings.cmake` **未启用 `/WX`**：Qt 6.11 头文件在 `/W4` 下仍有告警，待收敛后再开。
 - 测试里的 `app.selftest` 需要桌面会话（Windows 本机），CI 上不跑。
+- **HLSL 目前是运行时编译**：`D3D12Renderer` 用 `D3DCompileFromFile` 读 `shaders/image.hlsl`（随 exe 复制到 `shaders/`）。
+  好处是改着色器不用重新构建；代价是启动多花几十毫秒、发布包带源码。M2 接入色彩管线时评估改为离线 `fxc`/`dxc` 产物。
+- `CHROMA_SOURCE_DIR` 编译期写死源码路径，仅用于定位默认测试图；换机器需重新 configure。
 
 ## 8. 踩过的坑
 
@@ -112,4 +115,6 @@ ctest --preset windows-x64-debug --output-on-failure
 | `cmake --build` 报 `AutoMoc subprocess error ... libuv process spawn failed: operation not permitted` | Agent 沙箱禁止以管道方式派生子进程，而 AUTOMOC 走 libuv | 在 Agent 环境构建需放宽沙箱；本机普通终端无此问题 |
 | MSVC 报 `文本后缀"鍚"无效` | 源文件含中文但未加 `/utf-8` | 所有 C++ 目标统一加 `/utf-8` |
 | `std::wprintf` 不是 `std` 成员（MSVC） | `<cstdio>` 不提供宽字符版本 | 用全局 `wprintf` 并 `#include <cwchar>` |
+| 进程启动即 `0xC0000005`，控制台无任何输出 | `std::shared_ptr` 被 `std::move` 后继续解引用（`loaded->width`） | move 之后只用目标对象 |
+| 16-bit PNG 未被识别为「10-bit 码 << 6」 | alpha 由 WIC 补成 `0xFFFF`，低 6 位非 0，使「所有通道低 6 位为 0」永假 | 判定与重映射都只处理 RGB 通道 |
 | 中文路径构建失败 | 工具链对非 ASCII 路径敏感 | 仓库与依赖一律放 ASCII 路径 |
