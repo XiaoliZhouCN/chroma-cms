@@ -10,6 +10,8 @@ class QPaintEvent;
 class QResizeEvent;
 class QShowEvent;
 
+namespace chroma::media { struct Image; }
+
 namespace chroma::render {
 class D3D12Renderer;
 }
@@ -28,6 +30,8 @@ class ViewportWidget final : public QWidget {
 public:
     explicit ViewportWidget(QWidget* parent = nullptr);
     ~ViewportWidget() override;
+    explicit ViewportWidget(std::shared_ptr<const media::Image> image,
+                            QWidget* parent = nullptr);
 
 signals:
     void rendererReady(const QString& backend);
@@ -45,6 +49,8 @@ private:
 
     std::unique_ptr<render::D3D12Renderer> m_renderer;
     bool m_initAttempted = false;
+
+    std::shared_ptr<const media::Image> m_image;
 };
 
 } // namespace chroma::app

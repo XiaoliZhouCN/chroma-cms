@@ -4,6 +4,7 @@ add_library(chroma_render STATIC
     D3D12Renderer.cpp)
 
 target_link_libraries(chroma_render PUBLIC
-    chroma_gfx)
+    chroma_gfx
+    d3dcompiler)
 
 chroma_set_warnings(chroma_render)

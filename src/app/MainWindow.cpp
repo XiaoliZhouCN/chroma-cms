@@ -3,6 +3,10 @@
 #include "app/ViewportWidget.hpp"
 #include "core/Version.hpp"
 
+#include "media/ImageLoader.hpp"
+
+#include <utility>
+
 #include <QLabel>
 #include <QStatusBar>
 
@@ -11,18 +15,25 @@
 namespace chroma::app {
 
 MainWindow::MainWindow(QWidget* parent)
+    : MainWindow(nullptr, QString(), parent)
+{
+}
+
+MainWindow::MainWindow(std::shared_ptr<const media::Image> image, QString imagePath,
+                       QWidget* parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("ChromaCMS %1 — practice")
                        .arg(QString::fromStdString(std::string(kVersion))));
 
-    m_viewport = new ViewportWidget(this);
+    // 把 image 继续往下一层传
+    m_viewport = new ViewportWidget(std::move(image), this);
     setCentralWidget(m_viewport);
 
-     auto* status = new QLabel(this);
+    auto* status = new QLabel(this);
     status->setText(QStringLiteral("后端：%1").arg(m_backend));
     statusBar()->addPermanentWidget(status);
-    statusBar()->showMessage(QStringLiteral("第 2 步：D3D12 清屏"));
+    statusBar()->showMessage(QStringLiteral("图像：%1").arg(imagePath));
 
     connect(m_viewport, &ViewportWidget::rendererReady, this,
             [this, status](const QString& backend) {

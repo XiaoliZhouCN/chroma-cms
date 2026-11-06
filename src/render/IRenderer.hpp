@@ -17,6 +17,10 @@ public:
     virtual void present() = 0;
 
     virtual const char* backendName() const = 0;
+
+    /// 上传一张 RGBA16_UNORM 图像（宽高 + 像素数据；调用后数据即可释放）
+    virtual void setImage(std::uint32_t width, std::uint32_t height,
+                          const std::uint16_t* rgba16) = 0;
 };
 
 } // namespace chroma::render

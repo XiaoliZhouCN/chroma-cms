@@ -2,6 +2,10 @@
 
 #include "render/D3D12Renderer.hpp"
 
+#include "media/ImageLoader.hpp"
+
+#include <utility>
+
 #include <QColor>
 #include <QDebug>
 #include <QPaintEvent>
@@ -15,7 +19,13 @@
 namespace chroma::app {
 
 ViewportWidget::ViewportWidget(QWidget* parent)
+    : ViewportWidget(nullptr, parent)      // 委托给下面那个
+{
+}
+
+ViewportWidget::ViewportWidget(std::shared_ptr<const media::Image> image, QWidget* parent)
     : QWidget(parent)
+    , m_image(std::move(image))
 {
     setAttribute(Qt::WA_NativeWindow);
     setAttribute(Qt::WA_OpaquePaintEvent);
@@ -38,7 +48,7 @@ std::uint32_t ViewportWidget::physicalHeight() const
 
 void ViewportWidget::ensureRenderer()
 {
-    if (m_renderer || m_initAttempted) {
+    if (m_renderer || m_initAttempted) {        // 已初始化
         return;
     }
     m_initAttempted = true;
@@ -53,6 +63,10 @@ void ViewportWidget::ensureRenderer()
 
         const char* backend = renderer->backendName();
         m_renderer = std::move(renderer);
+
+        if (m_image) {
+            m_renderer->setImage(m_image->width, m_image->height, m_image->rgba16.data());
+        }
 
         qInfo().noquote() << "[gfx] backend =" << backend
                           << " swapchain =" << physicalWidth() << "x" << physicalHeight()

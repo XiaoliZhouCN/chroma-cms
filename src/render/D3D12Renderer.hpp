@@ -9,6 +9,7 @@ namespace chroma::render
 {
 /// 原生 D3D12 后端。
 /// 第二步范围：设备 / 命令队列 / 交换链 / RTV 描述符堆 / fence —— 把后台缓冲清成纯色。
+/// 第三步范围：根签名 + PSO + 着色器编译 + 全屏三角形（仍不碰纹理）。
 class D3D12Renderer final : public IRenderer
 {
 public:
@@ -23,6 +24,9 @@ public:
     void present() override;
     const char *backendName() const override; // 告诉调用方"当前这个渲染器到底是哪个实现"
 
+    void setImage(std::uint32_t width, std::uint32_t height,
+                  const std::uint16_t* rgba16) override;
+
 private:
     static constexpr std::uint32_t kFrameCount = 2;
 
@@ -30,7 +34,14 @@ private:
     void createSwapChain(void *nativeWindow);
     void createDescriptorHeaps();           // Q: 什么是Descriptor Heap？
                                             // A: 描述符堆, 是GPU资源的集合，类似于一个数组，里面存放了各种资源的描述符（Descriptor），比如纹理、缓冲区等。它们用于告诉GPU如何访问这些资源。
+    void createSrvHeap();
+    // void createTexture();
+    void createTextureFromImage(std::uint32_t width, std::uint32_t height,
+                                const std::uint16_t* rgba16);
+
     void createRenderTargets();
+    void createRootSignature();
+    void createPipelineState();
     void waitForGpu();
 
     gfx::ComPtr<ID3D12Device>       m_device;
@@ -41,6 +52,14 @@ private:
     gfx::ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     std::uint32_t m_rtvDescriptorSize = 0;
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvHandles[kFrameCount] = {};
+    gfx::ComPtr<ID3D12RootSignature> m_rootSignature;
+    gfx::ComPtr<ID3D12PipelineState> m_pipeline;
+
+    gfx::ComPtr<ID3D12DescriptorHeap> m_srvHeap;   // 1 个 SRV：测试纹理
+    gfx::ComPtr<ID3D12Resource>       m_texture;
+
+    std::uint32_t m_imageWidth = 0;
+    std::uint32_t m_imageHeight = 0;
 
     gfx::ComPtr<ID3D12CommandAllocator>     m_allocator;
     gfx::ComPtr<ID3D12GraphicsCommandList>   m_commandList;
