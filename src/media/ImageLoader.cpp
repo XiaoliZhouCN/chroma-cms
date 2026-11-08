@@ -8,8 +8,6 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-#include <windows.h>
-
 #include <cstring>
 
 namespace chroma::media {
@@ -22,35 +20,12 @@ std::string avErrorText(int code)
     return std::string(buffer);
 }
 
-std::string toUtf8(const std::wstring& text)
-{
-    if (text.empty()) {
-        return {};
-    }
-    const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
-                                         static_cast<int>(text.size()), nullptr, 0, nullptr,
-                                         nullptr);
-    if (size <= 0) {
-        return {};
-    }
-    std::string result(static_cast<size_t>(size), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), result.data(),
-                        size, nullptr, nullptr);
-    return result;
-}
-
 } // namespace
 
-bool loadImage(const std::wstring& path, Image& out, std::string& error)
+bool loadImage(const std::string& utf8Path, Image& out, std::string& error)
 {
     out = Image{};
     error.clear();
-
-    const std::string utf8Path = toUtf8(path);
-    if (utf8Path.empty()) {
-        error = "路径转换失败";
-        return false;
-    }
 
     AVFormatContext* format = nullptr;
     AVCodecContext* codecContext = nullptr;

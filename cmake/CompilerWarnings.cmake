@@ -5,7 +5,12 @@ if(NOT QT_ROOT)
     set(_chroma_qt_globs
         "C:/Qt/6.*/msvc*_64"
         "D:/Qt/6.*/msvc*_64"
-        "D:/Applications/QtCreator/6.*/msvc*_64")
+        "D:/Applications/QtCreator/6.*/msvc*_64"
+        "/opt/homebrew/opt/qt"
+        "/opt/homebrew/opt/qtbase"
+        "/usr/local/opt/qt"
+        "/usr/local/opt/qtbase"
+        "$ENV{HOME}/Qt/6.*/macos")
 
     set(_chroma_qt_candidates "")
     foreach(_glob IN LISTS _chroma_qt_globs)
@@ -23,8 +28,10 @@ if(QT_ROOT)
     list(PREPEND CMAKE_PREFIX_PATH "${QT_ROOT}")
     message(STATUS "ChromaCMS: QT_ROOT = ${QT_ROOT}")
 else()
-    message(FATAL_ERROR "未找到 Qt6。请传入 -DQT_ROOT=<Qt msvc*_64 目录>")
+    # 没显式设置时不要直接 FATAL：预设可能已经通过 CMAKE_PREFIX_PATH
+    # 或 Qt6_DIR 指定了 Qt，交给下面的 find_package(Qt6) 给出最终结论。
+    message(STATUS "ChromaCMS: QT_ROOT 未设置，交给 find_package(Qt6) 查找")
 endif()
 
-# 供 app 做 windeployqt 使用
+# 供 app 做 windeployqt 使用（仅 Windows 分支会用到）
 set(CHROMA_QT_ROOT "${QT_ROOT}" CACHE INTERNAL "Resolved Qt root")

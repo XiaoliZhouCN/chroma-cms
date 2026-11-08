@@ -9,7 +9,8 @@ class IRenderer {
 public:
     virtual ~IRenderer() = default;
 
-    /// nativeWindow 是 HWND；width/height 为**物理像素**（已乘 devicePixelRatio）。
+    /// nativeWindow 是平台原生窗口句柄（Windows HWND / macOS NSView*）；
+    /// width/height 为**物理像素**（已乘 devicePixelRatio）。
     virtual bool initialize(void* nativeWindow, std::uint32_t width, std::uint32_t height) = 0;
 
     virtual void resize(std::uint32_t width, std::uint32_t height) = 0;

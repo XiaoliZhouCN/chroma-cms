@@ -259,7 +259,7 @@ void D3D12Renderer::createSwapChain(void* nativeWindow)
 
     // 获取当前帧索引，后续每次 present 之后都要更新 m_frameIndex
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
-}
+} // createSwapChain
 
 // 创建 RTV 描述符堆，并计算每个 RTV 描述符的大小
 void D3D12Renderer::createDescriptorHeaps()
@@ -443,9 +443,7 @@ void D3D12Renderer::createSrvHeap()
 void D3D12Renderer::createTextureFromImage(std::uint32_t width, std::uint32_t height,
                                            const std::uint16_t* rgba16)
 {
-    // 0. 生成像素，未来可以从文件加载
     const std::uint32_t size = width;
-    // const std::vector<std::uint16_t> pixels = makeTestPixels();
 
     // 1. 创建目标纹理（DEFAULT 堆，GPU 专用）
     // 1.1 ID3D12Resource（资源），描述数据长什么样
@@ -513,14 +511,11 @@ void D3D12Renderer::createTextureFromImage(std::uint32_t width, std::uint32_t he
         "Map(upload)");
 
     auto* destination = static_cast<std::uint8_t*>(mapped) + footprint.Offset;
-    // const auto* source = reinterpret_cast<const std::uint8_t*>(pixels.data());
     const auto* source = reinterpret_cast<const std::uint8_t*>(rgba16);
     const std::uint64_t sourceRowPitch = static_cast<std::uint64_t>(width) * 8;  // RGBA16 = 8 B/px, 行优先，用width*bpp计算每行字节数
     for (UINT row = 0; row < numRows; ++row) {
         std::memcpy(
-            // dest = mapped + offset + row * rowPitch
             destination + static_cast<size_t>(row) * footprint.Footprint.RowPitch,
-            // src = pixels + row * (width * 8)
             source + row * sourceRowPitch, static_cast<size_t>(rowSize)); // 只拷贝rowSize有效字节，其余留空
     }
     // Q: 拷贝完成，释放？

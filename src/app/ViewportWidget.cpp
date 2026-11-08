@@ -1,6 +1,8 @@
 #include "app/ViewportWidget.hpp"
 
-#include "render/D3D12Renderer.hpp"
+#include "render/RendererFactory.hpp"
+#include "render/IRenderer.hpp"
+#include "render/IViewTransform.hpp"
 
 #include "media/ImageLoader.hpp"
 
@@ -12,11 +14,18 @@
 #include <QPainter>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QKeyEvent>
 
 #include <cmath>
 #include <exception>
+#include <algorithm>
 
 namespace chroma::app {
+namespace {
+constexpr float kZoomStep = 1.1f;
+constexpr float kMinZoom = 0.1f;
+constexpr float kMaxZoom = 8.0f;
+} // namespace
 
 ViewportWidget::ViewportWidget(QWidget* parent)
     : ViewportWidget(nullptr, parent)      // 委托给下面那个
@@ -54,9 +63,9 @@ void ViewportWidget::ensureRenderer()
     m_initAttempted = true;
 
     try {
-        auto renderer = std::make_unique<render::D3D12Renderer>();
+        auto renderer = render::createRenderer();
 
-        // QWidget::winId() 返回的是整数形式的 HWND
+        // QWidget::winId() 在 Windows 上是 HWND，在 macOS 上是 NSView*
         // Q: 为什么要 先创建renderer 再 move 到 m_renderer？
         // A: 先创建 renderer 并进行初始化，可以确保在初始化过程中捕获任何异常。如果直接在 m_renderer 中创建并初始化，一旦初始化失败，m_renderer 可能会处于不稳定状态。通过先创建一个局部的 renderer 对象，可以在初始化成功后再将其移动到 m_renderer，从而保证 m_renderer 始终处于有效状态。
         renderer->initialize(reinterpret_cast<void*>(winId()), physicalWidth(), physicalHeight());
@@ -68,8 +77,10 @@ void ViewportWidget::ensureRenderer()
             m_renderer->setImage(m_image->width, m_image->height, m_image->rgba16.data());
         }
 
+        applyViewTransform();
+
         qInfo().noquote() << "[gfx] backend =" << backend
-                          << " swapchain =" << physicalWidth() << "x" << physicalHeight()
+                          << " surface =" << physicalWidth() << "x" << physicalHeight()
                           << " dpr =" << devicePixelRatioF();
         emit rendererReady(QString::fromUtf8(backend));
     }
@@ -83,7 +94,45 @@ void ViewportWidget::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
     ensureRenderer();
+    setFocus(Qt::OtherFocusReason);
     update();
+}
+
+void ViewportWidget::applyViewTransform()
+{
+    if (auto* transform = dynamic_cast<render::IViewTransform*>(m_renderer.get())) {
+        transform->setQuarterTurns(m_quarterTurns);
+        transform->setZoom(m_zoom);
+    }
+}
+
+void ViewportWidget::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_A:
+        m_quarterTurns = (m_quarterTurns + 1) & 3;   // 逆时针 90°
+        break;
+    case Qt::Key_D:
+        m_quarterTurns = (m_quarterTurns + 3) & 3;   // 顺时针 90°
+        break;
+    case Qt::Key_Q:
+        m_zoom = std::max(kMinZoom, m_zoom / kZoomStep);   // 缩小
+        break;
+    case Qt::Key_E:
+        m_zoom = std::min(kMaxZoom, m_zoom * kZoomStep);   // 放大
+        break;
+    case Qt::Key_R:
+        m_quarterTurns = 0;
+        m_zoom = 1.0f;
+        break;
+    default:
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
+    applyViewTransform();
+    update();
+    event->accept();
 }
 
 void ViewportWidget::resizeEvent(QResizeEvent* event)
@@ -119,7 +168,7 @@ void ViewportWidget::paintEvent(QPaintEvent* event)
     QPainter painter(this);
     painter.fillRect(rect(), QColor(24, 24, 28));
     painter.setPen(QColor(230, 120, 120));
-    painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("D3D12 未就绪\n看控制台日志"));
+    painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("渲染器未就绪\n看控制台日志"));
 }
 
 } // namespace chroma::app

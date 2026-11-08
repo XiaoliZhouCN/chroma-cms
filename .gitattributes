@@ -8,6 +8,9 @@
 *.sksl  text eol=lf
 *.cpp   text eol=lf
 *.h     text eol=lf
+*.hpp   text eol=lf
+*.mm    text eol=lf
+*.metal text eol=lf
 *.cmake text eol=lf
 
 # 二进制资源不做文本转换

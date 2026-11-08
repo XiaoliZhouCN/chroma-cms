@@ -14,6 +14,6 @@ struct Image {
 };
 
 /// 用 FFmpeg 解码图片（只取第一帧）。成功返回 true，失败把原因写进 error。
-bool loadImage(const std::wstring& path, Image& out, std::string& error);
+bool loadImage(const std::string& utf8Path, Image& out, std::string& error);
 
 } // namespace chroma::media

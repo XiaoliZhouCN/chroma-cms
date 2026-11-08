@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 
+class QKeyEvent;
 class QPaintEvent;
 class QResizeEvent;
 class QShowEvent;
@@ -13,7 +14,7 @@ class QShowEvent;
 namespace chroma::media { struct Image; }
 
 namespace chroma::render {
-class D3D12Renderer;
+class IRenderer;
 }
 
 namespace chroma::app {
@@ -41,14 +42,19 @@ protected:
     void showEvent(QShowEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     void ensureRenderer();
+    void applyViewTransform();
     std::uint32_t physicalWidth() const;
     std::uint32_t physicalHeight() const;
 
-    std::unique_ptr<render::D3D12Renderer> m_renderer;
+    std::unique_ptr<render::IRenderer> m_renderer;
     bool m_initAttempted = false;
+
+    int m_quarterTurns = 0;
+    float m_zoom = 1.0f;
 
     std::shared_ptr<const media::Image> m_image;
 };

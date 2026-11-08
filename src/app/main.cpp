@@ -20,12 +20,14 @@ int main(int argc, char *argv[])
     {
         auto loaded = std::make_shared<chroma::media::Image>();
         std::string error;
-        if (chroma::media::loadImage(imagePath.toStdWString(), *loaded, error)) {
+        if (chroma::media::loadImage(imagePath.toStdString(), *loaded, error))
+        {
             image = loaded;
             qInfo().noquote() << "[media] 载入图像:" << imagePath << loaded->width << "x"
                               << loaded->height;
         }
-        else {
+        else
+        {
             qCritical().noquote() << "[media] 载入失败:" << QString::fromStdString(error);
         }
     }
