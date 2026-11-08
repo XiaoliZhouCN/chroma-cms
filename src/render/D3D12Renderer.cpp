@@ -125,6 +125,16 @@ const char* D3D12Renderer::backendName() const
     return "D3D12 (native)";
 }
 
+void D3D12Renderer::setQuarterTurns(int quarterTurns)
+{
+    m_quarterTurns = ((quarterTurns % 4) + 4) % 4;
+}
+
+void D3D12Renderer::setZoom(float zoom)
+{
+    m_zoom = (zoom > 0.0f) ? zoom : 1.0f;
+}
+
 /* ==================== initialize ==================== */
 bool D3D12Renderer::initialize(void* nativeWindow, std::uint32_t width, std::uint32_t height)
 {
@@ -337,13 +347,13 @@ void D3D12Renderer::createRootSignature()
     sampler.RegisterSpace = 0;
     sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
-    // 根参数 1：4 个 32 位常量，映射到 b0
+    // 根参数 1：8 个 32 位常量，映射到 b0
     D3D12_ROOT_PARAMETER params[2] = {};
     params[0] = param;                                    // 原 SRV 表
     params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     params[1].Constants.ShaderRegister = 0;               // b0
     params[1].Constants.RegisterSpace = 0;
-    params[1].Constants.Num32BitValues = 4;               // 4 个 DWORD = 16 字节
+    params[1].Constants.Num32BitValues = 8;               // 8 个 DWORD = 16 字节
     params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     // 签名描述：用C++结构体描述根签名的参数和静态采样器
@@ -644,22 +654,41 @@ void D3D12Renderer::present()
     m_commandList->SetGraphicsRootDescriptorTable(
         0, m_srvHeap->GetGPUDescriptorHandleForHeapStart());
 
-    // 根参数 1：outputScale 放在第 0 个 DWORD
-    const float shaderParams[4] = {0.8f, 0.0f, 0.0f, 0.0f};        // m_outputScale
-    m_commandList->SetGraphicsRoot32BitConstants(1, 4, shaderParams, 0);
+    // 根参数 1：outputScale / aspect / 2×2 采样逆变换矩阵（8 个 DWORD）
+    const int q = m_quarterTurns & 3;
+    const float c = (q == 0) ? 1.0f : (q == 2) ? -1.0f : 0.0f;
+    const float s = (q == 1) ? 1.0f : (q == 3) ? -1.0f : 0.0f;
+    const float invZoom = (m_zoom > 0.0f) ? (1.0f / m_zoom) : 1.0f;
+
+    float imageAspect = 1.0f;
+    if (m_imageWidth > 0 && m_imageHeight > 0) {
+        imageAspect = static_cast<float>(m_imageWidth) / static_cast<float>(m_imageHeight);
+    }
+
+    const float shaderParams[8] = {
+        m_outputScale,      // 0: outputScale（Windows 保持 0.8）
+        imageAspect,        // 1: imageWidth / imageHeight
+        c * invZoom,        // 2: m00
+        -s * invZoom,       // 3: m01
+        s * invZoom,        // 4: m10
+        c * invZoom,        // 5: m11
+        0.0f,               // 6
+        0.0f};              // 7
+    m_commandList->SetGraphicsRoot32BitConstants(1, 8, shaderParams, 0);
     
     // set view port and scissor rect
     // 按图片宽高比做 contain-fit：长边贴满，短边居中留边
-    const float imageAspect = static_cast<float>(m_imageWidth) / static_cast<float>(m_imageHeight);
+    // contain-fit：90°/270° 时用旋转后的宽高比（1/aspect）
+    const float effectiveAspect = ((m_quarterTurns & 1) != 0) ? (1.0f / imageAspect) : imageAspect;
     const float targetAspect = static_cast<float>(m_width) / static_cast<float>(m_height);
 
     float viewWidth = static_cast<float>(m_width);
     float viewHeight = static_cast<float>(m_height);
-    if (imageAspect > targetAspect) {
-        viewHeight = static_cast<float>(m_width) / imageAspect;  // 上下留边
+    if (effectiveAspect > targetAspect) {
+        viewHeight = static_cast<float>(m_width) / effectiveAspect;  // 上下留边
     }
     else {
-        viewWidth = static_cast<float>(m_height) * imageAspect;  // 左右留边
+        viewWidth = static_cast<float>(m_height) * effectiveAspect;  // 左右留边
     }
 
     const float viewLeft = (static_cast<float>(m_width) - viewWidth) * 0.5f;

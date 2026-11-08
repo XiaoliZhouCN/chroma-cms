@@ -2,6 +2,7 @@
 
 #include "gfx/D3D12Common.hpp"
 #include "render/IRenderer.hpp"
+#include "render/IViewTransform.hpp"
 
 #include <cstdint>
 
@@ -10,7 +11,7 @@ namespace chroma::render
 /// 原生 D3D12 后端。
 /// 第二步范围：设备 / 命令队列 / 交换链 / RTV 描述符堆 / fence —— 把后台缓冲清成纯色。
 /// 第三步范围：根签名 + PSO + 着色器编译 + 全屏三角形（仍不碰纹理）。
-class D3D12Renderer final : public IRenderer
+class D3D12Renderer final : public IRenderer, public IViewTransform
 {
 public:
     D3D12Renderer();
@@ -26,6 +27,9 @@ public:
 
     void setImage(std::uint32_t width, std::uint32_t height,
                   const std::uint16_t* rgba16) override;
+
+    void setQuarterTurns(int quarterTurns) override;
+    void setZoom(float zoom) override;
 
 private:
     static constexpr std::uint32_t kFrameCount = 2;
@@ -60,7 +64,11 @@ private:
 
     std::uint32_t m_imageWidth = 0;
     std::uint32_t m_imageHeight = 0;
-    float m_outputScale = 1.0f;
+    // 改前：float m_outputScale = 1.0f;   （没人用，present 里写的是字面量 0.8f）
+    float m_outputScale = 0.8f;
+
+    int   m_quarterTurns = 0;
+    float m_zoom         = 1.0f;
 
     gfx::ComPtr<ID3D12CommandAllocator>     m_allocator;
     gfx::ComPtr<ID3D12GraphicsCommandList>   m_commandList;

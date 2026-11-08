@@ -17,9 +17,13 @@ VsOut VSMain(uint vertexId : SV_VertexID)
 cbuffer ShaderParams : register(b0)
 {
     float outputScale;   // root constants[0]
+    float aspect;        // root constants[1]：imageWidth / imageHeight
+    float m00;           // root constants[2..5]：采样逆变换矩阵（已含 1/zoom）
+    float m01;
+    float m10;
+    float m11;
     float reserved0;
     float reserved1;
-    float reserved2;
 };
 
 Texture2D<float4> g_texture : register(t0);
@@ -60,9 +64,26 @@ float3 PqEotf(float3 code)
     return pow(numerator / max(denominator, 1e-6), 1.0 / m1);
 }
 
+// 90° 步进旋转 + 缩放：矩阵已由 CPU 合成到 m00..m11（采样逆变换）
+float2 TransformUV(float2 uv)
+{
+    float2 p = (uv - 0.5) * float2(aspect, 1.0);
+    p = float2(m00 * p.x + m01 * p.y,
+               m10 * p.x + m11 * p.y);
+    return p / float2(aspect, 1.0) + 0.5;
+}
+
 float4 PSMain(VsOut input) : SV_Target
 {
-    float3 code = g_texture.Sample(g_sampler, input.uv).rgb;   // 归一化 PQ 码值
+    const float2 uv = TransformUV(input.uv);
+
+    // 旋转/缩小后落到图片外的像素直接丢弃，露出 clear color
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+    {
+        discard;
+    }
+
+    float3 code = g_texture.Sample(g_sampler, uv).rgb;   // 归一化 PQ 码值
 
     float3 linear2020 = PqEotf(code);              // 相对亮度，1.0 = 10000 nits
     float3 xyz        = mul(kRec2020ToXYZ, linear2020);
