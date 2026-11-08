@@ -38,16 +38,24 @@ ChromaCMS 是一个**手写渲染器**练习项目：用 Qt 做窗口，用自�
 | 5 | `docs/handoff/04-dual-platform.md` | 双平台架构：渲染器工厂、CMake 条件、一致性测试 |
 | 6 | `docs/handoff/05-macos-setup.md` | macOS 环境搭建与排错 |
 | 7 | `docs/handoff/06-bootstrap-prompt.md` | 给新 agent 的启动提示词（用户可直接粘贴） |
+| 8 | `docs/handoff/07-windows-interaction.md` | **Windows 交互适配**：IViewTransform、90° 矩阵 UV、root constants |
 
 ## 3. 平台现状
 
 | 平台 | 后端 | 进度 |
 |---|---|---|
-| Windows | 自写 D3D12 | 设备/交换链 → 三角形 → 纹理 → FFmpeg 解码 → PQ 色彩管线（单 pass，scRGB 16F 输出）✅ |
-| macOS | 自写 Metal | **未开始**，从 M1（设备 + CAMetalLayer + 清屏）开始 |
+| Windows | 自写 D3D12 | 设备/交换链 → 三角形 → 纹理 → FFmpeg 解码 → PQ 色彩管线（单 pass，scRGB 16F 输出）✅；**交互待适配** |
+| macOS | 自写 Metal | M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互 ✅；M5 一致性待做 |
 
 两块屏的实际情况（Windows 侧已探测）：内屏 SDR/8bpc，外接 ASUS VG32AQL1A 通过 HDMI 2560×1440@60
 且 **HDR 已启用**、8bpc。所以"同一套颜色输出在两块屏上表现不同"是预期现象。
+
+**当前两侧色域是刻意不同的**：
+
+- Windows：BT.709 / scRGB，`outputScale = 0.8`；
+- macOS：Display-P3 线性，`outputScale = 1.0`，暂不设置 `CAEDRMetadata`。
+
+共享的是 PQ EOTF 和 BT.2020→XYZ；最后一步矩阵按平台不同。交互矩阵两侧共用。
 
 ## 4. 常用命令
 

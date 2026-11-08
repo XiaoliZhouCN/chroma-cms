@@ -1,7 +1,29 @@
 # 03 · Metal 移植方案（macOS）
 
-> 目标：用**同一套架构、同一套色彩数学**，在 macOS 上从零手写一个 Metal 渲染器，
-> 并与 Windows/D3D12 版本保持**逐像素可对照**的一致性。
+> 目标：用**同一套架构、共享同一段色彩数学**，在 macOS 上从零手写一个 Metal 渲染器。
+> 当前两端的最后色域矩阵不同（Windows 709 / macOS P3），所以**不要求逐像素一致**；
+> 共享到 XYZ，最后一步按平台分别断言。
+
+
+---
+
+## 0. 实现状态（2026-11-09，`practice` @ `e545d91`）
+
+macOS 侧已完成：M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互。
+
+**本文件下面的伪代码是“最初方案”，与当前实现有几处刻意差异：**
+
+| 项 | 本文伪代码 | 当前实现 |
+|---|---|---|
+| 最终色域 | XYZ→BT.709 / scRGB | **XYZ→Display-P3 线性** |
+| `outputScale` | 0.8 | **1.0** |
+| `CAEDRMetadata` | 未提 | **暂不设置** |
+| CAMetalLayer 挂载 | `view.layer = layer` | **子 NSView 承载 CAMetalLayer**（Qt 的 QContainerView 会替换 host.layer） |
+| 交互 | 无 | **A/D 90° 旋转、Q/E 缩放、R 复位**；8×float 常量 + 2×2 矩阵 UV |
+| shader 参数 | 4×float（outputScale + 3 reserved） | **8×float**（outputScale/aspect/m00..m11/reserved） |
+
+> 读 §5/§6 的 MSL 时注意：示例里的 `kXYZToRec709` 是 Windows 路径；macOS 实际用 `kXYZToDisplayP3`。  
+> 双平台一致性只要求共享到 XYZ；最后一步矩阵按平台不同。
 
 ## 1. 约束
 
@@ -10,7 +32,7 @@
 | 语言 | C++20 + **Objective-C++**（`.mm`）；不引入 metal-cpp（理由见 §2） |
 | 窗口 | Qt 6 Widgets，沿用 `ViewportWidget` 的 `WA_NativeWindow` 原生表面方案 |
 | 图形 API | Metal 3（macOS 13+）；`CAMetalLayer` 提供可绘制表面 |
-| 输出格式 | `MTLPixelFormatRGBA16Float` + `kCGColorSpaceExtendedLinearSRGB`（= Windows 的 scRGB 等价物） |
+| 输出格式 | `MTLPixelFormatRGBA16Float` + `kCGColorSpaceExtendedLinearDisplayP3`（当前实现） |
 | 着色器 | MSL 源码文件 `shaders/fullscreen.metal`，**运行时编译**（对应 D3DCompile） |
 | 接口 | 实现既有的 `chroma::render::IRenderer`（不要改接口签名） |
 
@@ -41,7 +63,7 @@
 | `ID3D12Device` | `id<MTLDevice>` | `MTLCreateSystemDefaultDevice()` |
 | `ID3D12CommandQueue` | `id<MTLCommandQueue>` | 一个队列够用 |
 | `IDXGISwapChain3` + 2 个后台缓冲 | `CAMetalLayer` + `nextDrawable` | Metal 由系统管理 drawable 轮转 |
-| `CreateSwapChainForHwnd(hwnd)` | `view.layer = metalLayer` | `winId()` 在 macOS 上是 `NSView*` |
+| `CreateSwapChainForHwnd(hwnd)` | 子 NSView 的 `layer = CAMetalLayer` | `winId()` 在 macOS 上是 `NSView*`；不要改 host.layer |
 | RTV 描述符堆 + `CreateRenderTargetView` | **不需要** | drawable.texture 直接当颜色附件 |
 | `ID3D12RootSignature` | **不需要** | 资源按 index 绑定 |
 | 根常量（`32BIT_CONSTANTS`） | `setFragmentBytes:length:atIndex:` | 1:1 对应，同样"内联在命令里" |
@@ -82,6 +104,7 @@ layer.maximumDrawableCount = 2;
 layer.displaySyncEnabled = YES;
 layer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB);
 layer.wantsExtendedDynamicRangeContent = YES;   // HDR/EDR（SDR 屏自动回落）
+// 注意：当前实现用子 NSView；下面是最初伪代码
 view.layer = layer;
 
 // 尺寸用**物理像素**（与 Windows 的 physicalWidth/Height 一致）
@@ -261,7 +284,7 @@ fragment float4 PSMain(VsOut in [[stage_in]],
 | Windows（现有） | macOS（目标） |
 |---|---|
 | 交换链 `R16G16B16A16_FLOAT` | drawable `MTLPixelFormatRGBA16Float` |
-| `DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709`（scRGB，线性，1.0=80 nits） | `kCGColorSpaceExtendedLinearSRGB` + `wantsExtendedDynamicRangeContent = YES` |
+| `DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709`（scRGB，线性，1.0=80 nits） | **当前实现**：`kCGColorSpaceExtendedLinearDisplayP3` + `wantsExtendedDynamicRangeContent = YES`；不设 `CAEDRMetadata` |
 | SDR 屏由 DWM 转 sRGB 显示 | SDR 屏由系统转 sRGB 显示（EDR 自动回落） |
 | HDR 屏由 DWM 按 SDR 白点映射 | HDR 屏由 EDR headroom 映射（`NSScreen.maximumPotentialExtendedDynamicRangeColorComponentValue` 可查） |
 | 清屏色是线性值 | 同样：`MTLClearColorMake(0.02, 0.02, 0.02, 1.0)` |
@@ -274,7 +297,7 @@ fragment float4 PSMain(VsOut in [[stage_in]],
 ### M1 · 设备 + 图层 + 清屏
 - 文件：`MetalRenderer.hpp/.mm`（空文件由 agent 建）
 - 验收：窗口均匀显示 `(0.02,0.02,0.02)` 线性灰；日志 `[gfx] backend = Metal`
-- 关键点：`view.layer = CAMetalLayer`、`drawableSize`、`colorspace`、`nextDrawable` + clear
+- 关键点：子 NSView + `CAMetalLayer`、`drawableSize`、`colorspace`、`nextDrawable` + clear
 
 ### M2 · 全屏三角形
 - 文件：`shaders/fullscreen.metal`（VS + 纯色/渐变 PS）
@@ -285,25 +308,30 @@ fragment float4 PSMain(VsOut in [[stage_in]],
 - 验收：显示棋盘格 + 四角标记（红/绿/蓝/白），方向正确 —— 对照 `images/expected-step4-texture.png`
 - 关键点：`MTLPixelFormatRGBA16Unorm`、staging buffer、blit 拷贝、sampler（linear + clamp）
 
-### M4 · 色彩管线
-- 验收：显示 PTMR 图，颜色饱和、不再发灰 —— 对照 `images/expected-step6-scrgb.jpg`
-- 关键点：MSL 里 PQ EOTF + 两个矩阵 + `/80`；矩阵列主序；负值 `max(·,0)`
+### M4 · 色彩管线 ✅
+- 验收：显示 PTMR 图，颜色饱和、不再发灰
+- 当前实现：PQ EOTF → BT.2020→XYZ → **XYZ→Display-P3** → `/80`；`outputScale=1.0`
+- 注意：macOS 暂时没有 `CAEDRMetadata`，高光会逐通道裁剪；这不是 shader 数学错误
 
-### M5 · 双平台一致性
-- 内容：`setFragmentBytes` 传 `outputScale`（对照 Windows 根常量）；
-  加 CPU 参考实现单元测试（见 04 §5）；两平台截图对照
-- 验收：同一张图在两平台输出肉眼一致；CPU 测试通过
+### M4.5 · 交互 ✅
+- A/D 90° 旋转、Q/E 缩放、R 复位
+- `IViewTransform` 可选接口；8×float 常量；旋转/缩放合成 2×2 矩阵
+- 非方图 90°/270° 时 viewport 宽高比交换
+
+### M5 · 双平台一致性（待做）
+- 内容：CPU 参考实现 + 单元测试（见 04 §5）；两平台只比较到 XYZ
+- 验收：PQ/XYZ 数学一致；最后矩阵按平台分别断言；截图不要求逐像素相同
 
 ## 9. macOS 专有坑
 
 | 坑 | 现象 | 处理 |
 |---|---|---|
 | `nextDrawable` 返回 nil | 偶发空指针崩溃 | 判空后直接 return，跳过该帧 |
-| Qt 重置 `view.layer` | 画面黑屏/闪烁 | 在 `showEvent` 里（原生窗口就绪后）设置 layer；必要时重设 |
+| Qt 重置 `view.layer` | 画面黑屏/闪烁 | **不要改 host.layer**；用子 NSView 承载 CAMetalLayer（Qt 6 会替换 host.layer） |
 | `drawableSize` 用的是点而不是像素 | 画面模糊/只占左上角 | `drawableSize` 用**物理像素**；`contentsScale = backingScaleFactor` |
-| 默认 colorspace 是 sRGB | 线性输出变暗 | 显式 `kCGColorSpaceExtendedLinearSRGB` |
+| 默认 colorspace 是 sRGB | 线性输出变暗 | 显式色彩空间；当前 mac 用 `kCGColorSpaceExtendedLinearDisplayP3` |
 | 16F drawable 不可用 | 创建失败 | 检查设备支持（Apple 芯片/较新 Intel 都支持；否则回落 `BGRA8Unorm_srgb` + 做 OETF） |
-| MSL 默认快速数学 | 与 HLSL 结果有细微差异 | `fastMathEnabled = NO` |
-| 应用打包后找不到 shader | `newLibraryWithSource` 报文件不存在 | 与 Windows 同策略：把 `shaders/` 拷到可执行文件同目录（bundle 里是 `Contents/MacOS/shaders`） |
+| MSL 默认快速数学 | 与 HLSL 结果有细微差异 | macOS 15+ `MTLMathModeSafe`；更老系统 `fastMathEnabled = NO` |
+| 应用打包后找不到 shader | `newLibraryWithSource` 报文件不存在 | 把 `shaders/` 拷到可执行文件同目录（bundle 里是 `Contents/MacOS/shaders`）；CMake 的 POST_BUILD 只在 relink 时拷贝 |
 | `waitUntilCompleted` 在主线程 | 窗口卡顿 | 先接受（与 Windows 全同步一致），后续用信号量/双缓冲优化 |
 | 截图黑屏 | 终端没有屏幕录制权限 | 系统设置授权后重试 |

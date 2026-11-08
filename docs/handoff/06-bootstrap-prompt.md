@@ -1,5 +1,9 @@
 # 06 · 给 macOS agent 的启动提示词
 
+> **状态（2026-11-09）**：macOS 侧已完成 M1–M4 + 90° 交互（`practice` @ `e545d91`）。
+> 这份提示词是当时 M1 的启动词，保留作历史参考。
+> 现在回到 Windows 适配交互，请看 [`07-windows-interaction.md`](07-windows-interaction.md)。
+
 > 用法：在 macOS 上开一个新的 agent 会话，把下面**整段**粘贴进去。
 > 它是自包含的——不依赖 Windows 侧会话的上下文。
 
@@ -19,7 +23,7 @@
 
 【这个项目是什么】
 手写渲染器练习：Qt 窗口 + 自写渲染后端，把一张 10-bit PQ(HDR) 测试图正确显示并做色彩管理。
-Windows 侧已用 D3D12 完成到"PQ EOTF → 色域矩阵 → scRGB 16F 输出"（分支 practice，HEAD da89fd6）。
+Windows 侧已用 D3D12 完成到"PQ EOTF → 色域矩阵 → scRGB 16F 输出"（分支 practice，当前 HEAD e545d91）。
 你现在负责 macOS 侧：用 Metal 从零实现同一个后端，最终双平台共用一套架构和色彩数学。
 
 【不可协商的规则】

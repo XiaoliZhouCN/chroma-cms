@@ -1,7 +1,7 @@
 # ChromaCMS · 交接文档（handoff）
 
-> 这套文档的用途：**让 macOS 上的 AI 协作 agent 能无缝接续 Windows 侧已经建立的协作方式和进度**，
-> 和用户一起完成 Metal 渲染器，并最终让 D3D12 / Metal 双平台共用同一套色彩管线。
+> 这套文档的用途：**让 Windows / macOS 两侧的 AI 协作 agent 能互相接续进度**。
+> macOS 侧已完成 M1–M4 与 90° 交互；现在回到 Windows 适配交互（见 `07`）。
 
 ## 阅读顺序
 
@@ -13,8 +13,9 @@
 | 4 | [`04-dual-platform.md`](04-dual-platform.md) | 双平台架构：渲染器工厂、CMake 条件、一致性测试 |
 | 5 | [`05-macos-setup.md`](05-macos-setup.md) | macOS 环境搭建、构建、截图、排错 |
 | 6 | [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) | 可直接粘贴给新 agent 的启动提示词 |
+| 7 | [`07-windows-interaction.md`](07-windows-interaction.md) | **Windows 交互适配**：IViewTransform、8×float 常量、90° 矩阵 UV |
 
-## 当前进度（截至 `practice` @ `da89fd6`）
+## 当前进度（截至 `practice` @ `e545d91`）
 
 ```
 Windows / D3D12（用户手写，agent 指导）
@@ -24,25 +25,34 @@ Windows / D3D12（用户手写，agent 指导）
   ✅ 4  纹理上传 + SRV + 采样
   ✅ 5  FFmpeg 解码 PNG → RGBA16 → 上屏
   ✅ 6.1 色彩管理（单 pass）：PQ EOTF → 2020→XYZ→709 线性 → scRGB（16F 输出，无 OETF）
-  ⬜ 6.2 根常量传参（outputScale 已跑通）/ 色调映射
-  ⬜ 6.3 HDR 输出路径 + 跨屏自适应
+  ✅ 6.2 根常量传参（outputScale = 0.8）
+  ⬜ 6.3 HDR / 色调映射 / 跨屏自适应
 
 macOS / Metal
-  ⬜ M1 设备 + CAMetalLayer + 清屏      ← 下一步
-  ⬜ M2 全屏三角形（MSL 运行时编译）
-  ⬜ M3 纹理上传 + 采样
-  ⬜ M4 色彩管线（与 Windows 数学完全一致）
+  ✅ M1 设备 + CAMetalLayer + 清屏
+  ✅ M2 全屏三角形（MSL 运行时编译）
+  ✅ M3 纹理上传 + 采样
+  ✅ M4 色彩管线：PQ → 2020→XYZ → 2020→Display-P3 线性
+  ✅ 交互：A/D 90° 旋转、Q/E 缩放、R 复位（矩阵 UV）
   ⬜ M5 双平台一致性验证
+
+Windows / D3D12
+  ⬜ 交互适配：给 D3D12Renderer 实现 IViewTransform      ← 下一步
+  ⬜ 双平台一致性（CPU ColorMath + CSV 断言）
 ```
 
-## 两张"标准答案"截图
+## 验收截图
 
 改造 Metal 时，用它们对照输出是否正确：
 
 - 纹理 / 采样阶段（棋盘格 + 四角标记）：
   ![step4](images/expected-step4-texture.png)
-- 色彩管线阶段（PQ 解码 + scRGB 输出）：
+- 色彩管线阶段（Windows：PQ 解码 + scRGB 输出）：
   ![step6](images/expected-step6-scrgb.jpg)
+- macOS 90° 交互（矩阵 UV）：
+  ![mac 90°](images/macos-90.png)
+- macOS 180° + 1.21× 缩放：
+  ![mac 180°](images/macos-180-zoom.png)
 
 ## 三条不可协商的原则
 
@@ -52,4 +62,6 @@ macOS / Metal
 
 ## 给新 agent 的第一句话
 
-把 [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) 里的整段内容粘贴给 macOS 上的 agent 即可。
+macOS：把 [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) 粘贴给 macOS 上的 agent。
+
+Windows：把 [`07-windows-interaction.md`](07-windows-interaction.md) 连同 `AGENTS.md` 一起交给 Windows 上的 agent。

@@ -1,14 +1,14 @@
 # 01 · 项目现状（Project State）
 
-> 快照时间：Windows 侧完成第 6.1 步（色彩管线单 pass）之后。
-> 分支 `practice` @ `da89fd6`，与 `origin/practice` 同步。
+> 快照时间：macOS 侧完成 M1–M4 与 90° 交互之后。
+> 分支 `practice` @ `e545d91`。Windows 侧下一步是交互适配（见 `07-windows-interaction.md`）。
 
 ## 1. Git
 
 | 项 | 值 |
 |---|---|
 | 工作分支 | `practice` |
-| HEAD | `da89fd6 [color] update color management` |
+| HEAD | `e545d91 feat(metal): add Metal backend with Display-P3 pipeline and view controls` |
 | 远端 | `git@github-shirley:XiaoliZhouCN/chroma-cms.git`（SSH 别名 `github-shirley`） |
 | 参考实现分支 | `develop` @ `86f1ea2`（**与 practice 无共同祖先**，只能按文件借用） |
 | 参考实现 tag | `ref-impl-m1`（本地存在；若 mac 上没有，用 `git show develop:<path>`） |
@@ -26,17 +26,21 @@ cmake/
   CompilerWarnings.cmake       （历史遗留拆分）
   FindFFmpeg.cmake             定位 external/ffmpeg，产出 FFmpeg::FFmpeg
 shaders/
-  fullscreen.hlsl              VS(全屏三角形) + PS(PQ → 线性 → scRGB)，运行时由 D3DCompile 编译
+  fullscreen.hlsl              Windows：VS(全屏三角形) + PS(PQ → 709 → scRGB)
+  fullscreen.metal             macOS：VS + PS(PQ → Display-P3)，运行时由 Metal 编译
 src/
   core/Version.hpp             版本号（INTERFACE 库 chroma_core）
   gfx/D3D12Common.hpp          ComPtr / ThrowIfFailed（INTERFACE 库 chroma_gfx）
-  media/ImageLoader.{hpp,cpp}  FFmpeg 解码 → RGBA16（chroma_media）
-  render/IRenderer.hpp         平台无关渲染器接口
-  render/D3D12Renderer.{hpp,cpp} 手写 D3D12 后端（chroma_render）
+  media/ImageLoader.{hpp,cpp}  FFmpeg 解码 → RGBA16；路径统一 UTF-8（chroma_media）
+  render/IRenderer.hpp         平台无关渲染器接口（未改签名）
+  render/IViewTransform.hpp    可选交互接口：setQuarterTurns / setZoom
+  render/RendererFactory.{hpp,cpp} 按平台创建 D3D12 / Metal
+  render/D3D12Renderer.{hpp,cpp} 手写 D3D12 后端（Windows）
+  render/MetalRenderer.{hpp,mm}  手写 Metal 后端（macOS）
   app/main.cpp                 加载图片 → MainWindow
   app/MainWindow.{hpp,cpp}     窗口 + 状态栏
-  app/ViewportWidget.{hpp,cpp} 原生表面宿主：show/resize/paint → renderer
-tests/unit/smoke_test.cpp      冒烟测试（ctest 2 项）
+  app/ViewportWidget.{hpp,cpp} 原生表面宿主 + A/D/Q/E/R 交互
+tests/unit/smoke_test.cpp      冒烟测试（ctest 1 项）
 tools/
   gen_ptmr.py                  PTMR 测试图生成器（当前在仓库里）
   fetch-ffmpeg.ps1             Windows FFmpeg 下载脚本
@@ -54,18 +58,43 @@ tools/
 | 6.1 | 色彩管理（单 pass） | PQ EOTF → BT.2020→XYZ→BT.709 线性 → `/80` 得 scRGB 单位；**不做 OETF** |
 | 6.2 | 根常量传参 | 根参数 1 = 4×DWORD 根常量（b0），`outputScale` 已实测生效（1.0 → 窗口均亮度 94.7，0.0 → 31.2） |
 
-### 色彩数学（双平台必须完全一致）
+### 已实现的能力（macOS / Metal）
+
+| 步骤 | 内容 | 关键完成点 |
+|---|---|---|
+| M1 | 设备 + CAMetalLayer + 清屏 | 子 NSView 承载 CAMetalLayer（不用 `host.layer`，Qt 会替换） |
+| M2 | 全屏三角形 | 运行时 `newLibraryWithSource` + PSO；`fastMathEnabled=NO`/`MTLMathModeSafe` |
+| M3 | 纹理上传 + 采样 | `RGBA16Unorm` + 256 字节行对齐 + blit + linear/clamp sampler |
+| M4 | 色彩管线 | PQ EOTF → BT.2020→XYZ → **XYZ→Display-P3** → `/80`；`outputScale=1.0` |
+| 交互 | 90° 旋转 / 缩放 | `IViewTransform` + 8×float root constants + 2×2 矩阵 UV；A/D/Q/E/R |
+
+**macOS 当前显示配置：**
+
+- `CAMetalLayer.colorspace = kCGColorSpaceExtendedLinearDisplayP3`；
+- `wantsExtendedDynamicRangeContent = YES`；
+- **暂不设置 `CAEDRMetadata`**；
+- 因此 10,000 nits 内容在 8bpc/有限 headroom 屏上会逐通道裁剪（高光泛白/偏色），这是已知情况。
+
+### 色彩数学（共享部分与平台差异）
 
 ```
 code（归一化 PQ 码值）
   → PQ EOTF（ST.2084）→ 相对亮度 L（1.0 = 10000 nits）
   → BT.2020 线性 RGB → CIE XYZ（D65）
-  → 线性 BT.709 RGB
+  → 平台最后矩阵：
+       Windows: XYZ → BT.709 线性
+       macOS:   XYZ → Display-P3 线性
   → max(·, 0) 裁负值
   → × 10000 得 nits
-  → / 80 得 scRGB 单位（1.0 = 80 nits）
-输出（不做 OETF，因为交换链是线性 scRGB）
+  → / 80
+  → × outputScale：
+       Windows: 0.8
+       macOS:   1.0
+输出（不做 OETF，因为两边 drawable 都是线性扩展色域）
 ```
+
+**共享部分**：PQ EOTF、BT.2020→XYZ。  
+**平台差异**：最后一步矩阵和 `outputScale`；两端**不要求逐像素一致**。
 
 常量（HLSL 与 MSL 必须一致）：
 
@@ -79,7 +108,8 @@ code（归一化 PQ 码值）
 | 峰值亮度 | 10000 nits |
 | scRGB 参考 | 80 nits |
 | BT.2020→XYZ 行 | `0.636958 0.144617 0.168881` / `0.262700 0.677998 0.059302` / `0.000000 0.028073 1.060985` |
-| XYZ→BT.709 行 | `3.240970 -1.537383 -0.498611` / `-0.969244 1.875968 0.041555` / `0.055630 -0.203977 1.056972` |
+| XYZ→BT.709 行（Windows） | `3.240970 -1.537383 -0.498611` / `-0.969244 1.875968 0.041555` / `0.055630 -0.203977 1.056972` |
+| XYZ→Display-P3 行（macOS） | `2.4934969119 -0.9313836179 -0.4027107845` / `-0.8294889696 1.7626640603 0.0236246858` / `0.0358458302 -0.0761723893 0.9568845240` |
 
 ## 4. 同步模型（当前是"全同步"，故意简单）
 
@@ -120,12 +150,12 @@ python tools/gen_ptmr.py --out assets/test-images/PTMR_9-16-9-full_2048x2048_10b
 
 | 项 | 说明 |
 |---|---|
-| Metal 后端 | 完全未开始 → 见 `03-metal-plan.md` |
-| 渲染器工厂 | `ViewportWidget` 里还硬编码 `D3D12Renderer` → 见 `04-dual-platform.md` |
-| 色调映射 | 目前交给 Windows DWM 兜底；自己的 BT.2390 还没写 |
-| HDR 输出 | 外接屏 HDR 已启用，但还没做跨屏/EDR 自适应 |
-| 一致性测试 | 没有 CPU 参考实现与单元测试，双平台数学靠人工对照 |
-| 性能 | 全同步、单 allocator，CPU/GPU 串行 |
+| Windows 交互 | `D3D12Renderer` 还没实现 `IViewTransform` → 见 `07-windows-interaction.md` |
+| macOS EDR | `CAEDRMetadata` / tone mapping 未做；`outputScale=1.0` 高光逐通道裁剪 |
+| 色调映射 | 两平台都还没有自己的 BT.2390 |
+| 一致性测试 | 没有 CPU 参考实现与单元测试；目前靠离屏回读/截图人工对照 |
+| 性能 | 全同步；Windows 单 allocator，Metal 每帧 `waitUntilCompleted` |
+| 非方图旋转 | contain-fit 已按 90° 交换宽高比，但 PTMR 是方图，尚未用非方图实测 |
 
 ## 8. 验证证据
 
@@ -134,3 +164,7 @@ python tools/gen_ptmr.py --out assets/test-images/PTMR_9-16-9-full_2048x2048_10b
 | 纹理采样 | `images/expected-step4-texture.png` |
 | 色彩管线 | `images/expected-step6-scrgb.jpg` |
 | 根常量 | `images/expected-rootconst.png` |
+| macOS M4 Display-P3 | `images/macos-m4-p3.png`（高光裁剪是已知情况） |
+| macOS 90° 交互 | `images/macos-90.png` |
+| macOS 180° + 缩放 | `images/macos-180-zoom.png` |
+| macOS R 复位 | `images/macos-reset.png` |
