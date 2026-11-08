@@ -9,8 +9,10 @@
 namespace chroma::render {
 namespace {
 
-constexpr DXGI_FORMAT kSwapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+constexpr DXGI_FORMAT kSwapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;     // Q: 为什么不用16？为什么不用Float？
+
 constexpr DXGI_COLOR_SPACE_TYPE kSwapChainColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;     // rgb P709(SRGB), 2.2 gamma, full range
+// 22 gamma is for SDR, 10 gamma is for HDR
 
 // 清屏色：深蓝灰。第一步只要"能看见一层稳定的颜色"就算成功。
 constexpr float kClearColor[4] = {0.12f, 0.14f, 0.18f, 1.0f};
@@ -415,6 +417,8 @@ void D3D12Renderer::createPipelineState()
 
 /* ==================== 纹理 ==================== */
 
+// SRV(Shader Resource View， 着色器资源摄图) 
+// 1个描述符，告诉硬件“着色器怎么读这块资源”
 void D3D12Renderer::createSrvHeap()
 {
     D3D12_DESCRIPTOR_HEAP_DESC desc{};
@@ -436,6 +440,7 @@ void D3D12Renderer::createTextureFromImage(std::uint32_t width, std::uint32_t he
     // const std::vector<std::uint16_t> pixels = makeTestPixels();
 
     // 1. 创建目标纹理（DEFAULT 堆，GPU 专用）
+    // 1.1 ID3D12Resource（资源），描述数据长什么样
     D3D12_RESOURCE_DESC textureDesc{};
     textureDesc.Dimension        = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     textureDesc.Width            = width;
@@ -447,10 +452,11 @@ void D3D12Renderer::createTextureFromImage(std::uint32_t width, std::uint32_t he
     textureDesc.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     textureDesc.Flags            = D3D12_RESOURCE_FLAG_NONE;
 
+    // 1.2 Heap（堆）,描述内存在哪、多大
     D3D12_HEAP_PROPERTIES defaultHeap{};
     defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
     gfx::ThrowIfFailed(
-        m_device->CreateCommittedResource(
+        m_device->CreateCommittedResource(      // committe, placed, reserved 三种绑定方式（ID3D12Resource - Heap 的绑定）
             &defaultHeap, 
             D3D12_HEAP_FLAG_NONE,   // GPU 专用堆
             &textureDesc,
@@ -604,8 +610,8 @@ void D3D12Renderer::present()
 
     m_commandList->ClearRenderTargetView(m_rtvHandles[m_frameIndex], kClearColor, 0, nullptr);
 
+    // 还没有图像：只清屏，不做 draw（避免绑定空 SRV）
     if (m_imageWidth == 0 || m_imageHeight == 0) {
-        // 还没有图像：只清屏，不做 draw（避免绑定空 SRV）
         D3D12_RESOURCE_BARRIER back{};
         back.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         back.Transition.pResource = backBuffer;
