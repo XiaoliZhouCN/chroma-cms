@@ -60,6 +60,7 @@ private:
 
     std::uint32_t m_imageWidth = 0;
     std::uint32_t m_imageHeight = 0;
+    float m_outputScale = 1.0f;
 
     gfx::ComPtr<ID3D12CommandAllocator>     m_allocator;
     gfx::ComPtr<ID3D12GraphicsCommandList>   m_commandList;

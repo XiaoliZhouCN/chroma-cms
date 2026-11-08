@@ -9,13 +9,13 @@
 namespace chroma::render {
 namespace {
 
-constexpr DXGI_FORMAT kSwapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;     // Q: 为什么不用16？为什么不用Float？
+constexpr DXGI_FORMAT kSwapChainFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;     // Q: 为什么不用16？为什么不用Float？ 16F：能装 >1.0 的 HDR 值
 
-constexpr DXGI_COLOR_SPACE_TYPE kSwapChainColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;     // rgb P709(SRGB), 2.2 gamma, full range
+constexpr DXGI_COLOR_SPACE_TYPE kSwapChainColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;     // rgb P709(SRGB), 线性, full range
 // 22 gamma is for SDR, 10 gamma is for HDR
 
 // 清屏色：深蓝灰。第一步只要"能看见一层稳定的颜色"就算成功。
-constexpr float kClearColor[4] = {0.12f, 0.14f, 0.18f, 1.0f};
+constexpr float kClearColor[4] = {0.02f, 0.02f, 0.02f, 1.0f};
 
 // 取 exe 所在目录：着色器随 exe 发布在 <exe目录>/shaders/ 下
 std::wstring executableDirectory()
@@ -136,7 +136,6 @@ bool D3D12Renderer::initialize(void* nativeWindow, std::uint32_t width, std::uin
     m_height = height;
 
     // 创建设备、命令队列、交换链、RTV 描述符堆、渲染目标
-    // Q: 
     createDeviceAndQueue();
     createSwapChain(nativeWindow);
     createDescriptorHeaps();
@@ -338,10 +337,19 @@ void D3D12Renderer::createRootSignature()
     sampler.RegisterSpace = 0;
     sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
+    // 根参数 1：4 个 32 位常量，映射到 b0
+    D3D12_ROOT_PARAMETER params[2] = {};
+    params[0] = param;                                    // 原 SRV 表
+    params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    params[1].Constants.ShaderRegister = 0;               // b0
+    params[1].Constants.RegisterSpace = 0;
+    params[1].Constants.Num32BitValues = 4;               // 4 个 DWORD = 16 字节
+    params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
     // 签名描述：用C++结构体描述根签名的参数和静态采样器
     D3D12_ROOT_SIGNATURE_DESC desc{};
-    desc.NumParameters = 1;
-    desc.pParameters = &param;
+    desc.NumParameters = 2;
+    desc.pParameters = params;
     desc.NumStaticSamplers = 1;
     desc.pStaticSamplers = &sampler;
     desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -641,6 +649,10 @@ void D3D12Renderer::present()
     m_commandList->SetGraphicsRootDescriptorTable(
         0, m_srvHeap->GetGPUDescriptorHandleForHeapStart());
 
+    // 根参数 1：outputScale 放在第 0 个 DWORD
+    const float shaderParams[4] = {0.8f, 0.0f, 0.0f, 0.0f};        // m_outputScale
+    m_commandList->SetGraphicsRoot32BitConstants(1, 4, shaderParams, 0);
+    
     // set view port and scissor rect
     // 按图片宽高比做 contain-fit：长边贴满，短边居中留边
     const float imageAspect = static_cast<float>(m_imageWidth) / static_cast<float>(m_imageHeight);
