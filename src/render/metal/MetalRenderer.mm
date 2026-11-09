@@ -1,4 +1,5 @@
 #include "render/metal/MetalRenderer.hpp"
+#include "gfx/metal/MetalContext.hpp"
 
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
@@ -26,7 +27,7 @@ std::string nsErrorText(NSError *error)
     }
     return std::string([[error localizedDescription] UTF8String]);
 }
-// 与 MSL 里的 ShaderParams 布局一致：4 个 float = 16 字节。
+// 与 MSL 里的 ShaderParams 布局一致：8 个 float = 32 字节。
 struct ShaderParams
 {
     float outputScale;
@@ -57,36 +58,35 @@ CG = Core Graphics
 // A: ARC = Automatic Reference Counting，自动引用计数
 struct MetalRenderer::Impl
 {
-    id<MTLDevice>              device     = nil;
-    id<MTLCommandQueue>        queue      = nil;
+    // 原生资源（device/queue/layer/子 view/command buffer）都由 MetalContext 持有；
+    // 放在最前面，保证 Impl 析构时它最后释放（资源先释放，上下文最后拆）。
+    std::unique_ptr<gfx::MetalContext> context;
+
+    // id<MTLDevice>              device     = nil;
+    // id<MTLCommandQueue>        queue      = nil;
     id<MTLLibrary>             library    = nil;        // Q: 什么是library？作用是什么？
                                                         // A: 运行时编译出来的 Metal 库, 相当于ID3DBlob（编译后的字节码容器）
                                                         //    CreateGraphicsPipelineState / newRenderPipelineState 只接受“已经编译好的着色器产物”，不接受 HLSL/MSL 源码。ID3DBlob 和 MTLLibrary 就是这个中间产物。
     id<MTLRenderPipelineState> pipeline   = nil;        // Pipline State， win 里也有
     id<MTLTexture>             texture    = nil;
     id<MTLSamplerState>        sampler    = nil;
-    CAMetalLayer               *layer     = nil;
-    NSView                     *host      = nil;
-    NSView                     *metalView = nil;
+    // CAMetalLayer               *layer     = nil;
+    // NSView                     *host      = nil;
+    // NSView                     *metalView = nil;
 
-    std::uint32_t width  = 0;
-    std::uint32_t height = 0;
-    std::uint32_t imageWidth  = 0;
-    std::uint32_t imageHeight = 0;
-    int   quarterTurns = 0;
-    float zoom         = 1.0f;
+    // std::uint32_t width         = 0;
+    // std::uint32_t height        = 0;
+    std::uint32_t imageWidth    = 0;
+    std::uint32_t imageHeight   = 0;
+    int   quarterTurns          = 0;
+    float zoom                  = 1.0f;
 
-    bool initialized = false;
+    bool initialized            = false;
 };
 
 MetalRenderer::MetalRenderer(): m_impl(std::make_unique<Impl>()){}
 
-MetalRenderer::~MetalRenderer()
-{
-    if (m_impl->metalView != nil) {
-        [m_impl->metalView removeFromSuperview];
-    }
-}
+MetalRenderer::~MetalRenderer() = default;
 
 bool MetalRenderer::initialize(void *nativeWindow, std::uint32_t width, std::uint32_t height)
 {
@@ -97,15 +97,9 @@ bool MetalRenderer::initialize(void *nativeWindow, std::uint32_t width, std::uin
         throw std::runtime_error("MetalRenderer::initialize 参数无效");
     }
 
-    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-    if (device == nil) {
-        throw std::runtime_error("MTLCreateSystemDefaultDevice 返回 nil");
-    }
-
-    id<MTLCommandQueue> queue = [device newCommandQueue];
-    if (queue == nil) {
-        throw std::runtime_error("newCommandQueue 返回 nil");
-    }
+    m_impl->context = std::make_unique<gfx::MetalContext>();
+    m_impl->context->initialize(nativeWindow, width, height);
+    id<MTLDevice> device = (__bridge id<MTLDevice>)m_impl->context->device();
 
     // ---- M2: 运行时编译 MSL + 建 PSO ----
     // 读取 MSL
@@ -160,7 +154,8 @@ bool MetalRenderer::initialize(void *nativeWindow, std::uint32_t width, std::uin
     pipelineDescriptor.vertexFunction                   = vertexFunction;                       // 设置 vertex shader
     pipelineDescriptor.fragmentFunction                 = fragmentFunction;                     // 设置 fragment shader
     pipelineDescriptor.inputPrimitiveTopology           = MTLPrimitiveTopologyClassTriangle;    // 三角形
-    pipelineDescriptor.colorAttachments[0].pixelFormat  = MTLPixelFormatRGBA16Float;            // 像素格式为f16 float
+    pipelineDescriptor.colorAttachments[0].pixelFormat  =                                       // 像素格式为f16 float
+        static_cast<MTLPixelFormat>(m_impl->context->colorFormat());            
 
     // create pipline
     // Q: 哪里是PSO？
@@ -185,56 +180,12 @@ bool MetalRenderer::initialize(void *nativeWindow, std::uint32_t width, std::uin
     if (sampler == nil) {
         throw std::runtime_error("创建 Metal sampler 失败");
     }
-
-    NSView *host = (__bridge NSView *)nativeWindow;     // Q: 句柄？相当于winId？
-                                                        // A: Yes. 平台原生窗口句柄,Windows 是 HWND，macOS 是 NSView*;
-    NSView *metalView = [[NSView alloc] initWithFrame:host.bounds];
-    metalView.wantsLayer = YES;
-    metalView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-
-
-    CAMetalLayer *layer = [CAMetalLayer layer];
-    layer.device = device;
-    layer.pixelFormat = MTLPixelFormatRGBA16Float;
-    layer.framebufferOnly = YES;
-    layer.maximumDrawableCount = 2;
-    layer.displaySyncEnabled = YES;
-    layer.contentsScale = host.window != nil ? host.window.backingScaleFactor : 1.0;
-    layer.drawableSize = CGSizeMake(static_cast<CGFloat>(width), static_cast<CGFloat>(height));
-
-    // set CG Color Space， win 中 在 createSwapchain中设置， Metal中没有 swapchain概念，由CAMetalLayer统一管理
-    // 明确告诉系统：缓冲区是线性值，且允许超过 1.0 的 EDR 内容。
-    // 先不设置 CAEDRMetadata；M4.2 再处理 EDR tone mapping。
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearDisplayP3);
-    if (colorSpace == nullptr) {
-        throw std::runtime_error("CGColorSpaceCreateWithName(ExtendedLinearDisplayP3) 返回 nil");
-    }
-    layer.colorspace = colorSpace;
-    CGColorSpaceRelease(colorSpace);
-
-    // M1 先打开 EDR；M4 再补 CAEDRMetadata 做绝对亮度映射。
-    layer.wantsExtendedDynamicRangeContent = YES;
-
-    // Q: 为什么在这里赋值？
-    // A: wantsLayer = YES 之后，AppKit 会给这个 view 准备一个 backing layer。
-    //    然后把它的 layer 替换成自己的 CAMetalLayer。
-    //    在 addSubview 之前挂好，子 view 一进入视图树就已经有正确的 layer，不会先闪一下空背景。
-    metalView.layer = layer;
-    [host addSubview:metalView];
-
-    m_impl->device = device;
-    m_impl->queue = queue;
+    
     m_impl->library = library;
     m_impl->pipeline = pipeline;
     m_impl->sampler = sampler;
-    m_impl->host = host;
-    m_impl->metalView = metalView;
-    m_impl->layer = layer;
-    m_impl->width = width;
-    m_impl->height = height;
     m_impl->initialized = true;
 
-    std::fprintf(stderr, "[gfx] Metal device = %s\n", [[device name] UTF8String]);
     std::fprintf(stderr, "[gfx] MSL compiled: VSMain / PSMain\n");
     return true;
 }
@@ -245,39 +196,23 @@ void MetalRenderer::resize(std::uint32_t width, std::uint32_t height)
         return;
     }
 
-    m_impl->width = width;
-    m_impl->height = height;
-
-    // subview 的 frame 用 point，drawableSize 用物理像素。
-    // Q: 什么是 points？ 这里的 frame 和 win 中的什么概念对应？
-    // A: macOS 的坐标默认用 point（逻辑单位），对应的物理单位是pixel。
-    //    frame：这个 view 在父视图坐标系里的矩形（位置 + 大小）。
-    //    bounds：这个 view 在自己坐标系里的矩形（通常是 (0,0,width,height)）。
-    m_impl->metalView.frame = m_impl->host.bounds;
-    m_impl->layer.drawableSize = CGSizeMake(static_cast<CGFloat>(width),
-                                            static_cast<CGFloat>(height));
-    // Q: 这一步在做什么？和 win 中什么对应？
-    // A: 这个 layer 的 1 个 point 对应多少个像素，仍然在做窗口映射。
-    //    单独的 contentsScale 跟  win 没有对应。
-    if (m_impl->host.window != nil) {
-        m_impl->layer.contentsScale = m_impl->host.window.backingScaleFactor;
-    }
+    m_impl->context->resize(width, height);
 }
 
 void MetalRenderer::present()
 {
-    if (!m_impl->initialized) {
-        return;
-    }
+    if (!m_impl->initialized) { return; }
 
-    // 1. get next drawable
-    id<CAMetalDrawable> drawable = [m_impl->layer nextDrawable];        // Q: 这相当于 swapchain吗？
-                                                                        // A: 概念上类似，实际逻辑更像swap chain + 呈现管理
-    if (drawable == nil) {
-        // drawable 池暂时耗尽：跳过这一帧，不要崩。
+    // 1. 由 context 取 drawable + command buffer
+    if (!m_impl->context->beginFrame()) {
         std::fprintf(stderr, "[gfx] nextDrawable 返回 nil，跳过这一帧\n");
         return;
     }
+
+    id<CAMetalDrawable> drawable = 
+        (__bridge id<CAMetalDrawable>)m_impl->context->currentDrawable();
+    id<MTLCommandBuffer> commandBuffer =
+        (__bridge id<MTLCommandBuffer>)m_impl->context->commandBuffer();
 
     // 2. clear screen
     // Q: 相当于 win 的 Descriptor Heaps？
@@ -294,24 +229,26 @@ void MetalRenderer::present()
     // Q: 相当于 win 的 command list 和 command allocator？
     // A: MTLCommandBuffer ≈ command list + allocator + 提交单元
     //    MTLRenderCommandEncoder ≈ 真正录制绘制命令的 command list
-    id<MTLCommandBuffer> commandBuffer = 
-    [m_impl->queue commandBuffer];
+
+    // renderer 自己建 render pass/encoder；command buffer 由 context 提供
+    // id<MTLCommandBuffer> commandBuffer = 
+    // [m_impl->queue commandBuffer];
     id<MTLRenderCommandEncoder> encoder =
         [commandBuffer renderCommandEncoderWithDescriptor:pass];
-    // >> 开始录制命令
+        
+
     // 图片为空
     if (m_impl->texture == nil) {
-        // 图片还没准备好：只清屏。
         [encoder endEncoding];
-        [commandBuffer presentDrawable:drawable];
-        [commandBuffer commit];
-        [commandBuffer waitUntilCompleted];
+        m_impl->context->endFrame();
         return;
     }
 
-    [encoder setRenderPipelineState:m_impl->pipeline];              // 设置 pipline status
-    [encoder setFragmentTexture:m_impl->texture atIndex:0];         // 设置纹理
-    [encoder setFragmentSamplerState:m_impl->sampler atIndex:0];    // 设置采样器
+    // >> 开始录制命令：
+    // Q: 这里还是要录制啊，没有用到 beginCommandList 和 submitAndWait
+    [encoder setRenderPipelineState     :m_impl->pipeline];             // 设置 pipline status
+    [encoder setFragmentTexture         :m_impl->texture atIndex:0];    // 设置纹理
+    [encoder setFragmentSamplerState    :m_impl->sampler atIndex:0];    // 设置采样器
 
     // 对应 D3D12 的根常量 b0：outputScale / rotation / zoom / aspect， 并设置到shader
     // 90° 步进：CPU 直接合成旋转 + 缩放的 2×2 矩阵，shader 不再算 cos/sin。
@@ -368,20 +305,11 @@ void MetalRenderer::present()
     [encoder setScissorRect:scissor];
 
     [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-
     [encoder endEncoding];
     // << 结束录制
 
-
-    // 4. 录制命令
-    [commandBuffer presentDrawable:drawable];
-    [commandBuffer commit];
-    [commandBuffer waitUntilCompleted];
-
-    if (commandBuffer.status == MTLCommandBufferStatusError) {
-        const std::string text = nsErrorText(commandBuffer.error);
-        std::fprintf(stderr, "[gfx] Metal command buffer error: %s\n", text.c_str());
-    }
+    // 4. 由 context 负责 present + commit + wait
+    m_impl->context->endFrame();
 }
 
 const char *MetalRenderer::backendName() const
@@ -403,9 +331,10 @@ void MetalRenderer::setZoom(float zoom)
 void MetalRenderer::setImage(std::uint32_t width, std::uint32_t height,
                              const std::uint16_t *rgba16)
 {
-    if (!m_impl->initialized || rgba16 == nullptr || width == 0 || height == 0) {
-        return;
-    }
+    if (!m_impl->initialized || rgba16 == nullptr || width == 0 || height == 0) { return; }
+
+    // 局部device
+    id<MTLDevice> device = (__bridge id<MTLDevice>)m_impl->context->device();
 
     // 1. 创建纹理
     // 创建 texture descriptor， 类似win中 resource 和 heap
@@ -417,7 +346,7 @@ void MetalRenderer::setImage(std::uint32_t width, std::uint32_t height,
     textureDescriptor.usage = MTLTextureUsageShaderRead;
     textureDescriptor.storageMode = MTLStorageModePrivate;
 
-    id<MTLTexture> texture = [m_impl->device newTextureWithDescriptor:textureDescriptor];
+    id<MTLTexture> texture = [device newTextureWithDescriptor:textureDescriptor];
     if (texture == nil) {
         throw std::runtime_error("创建 Metal 纹理失败");
     }
@@ -449,9 +378,9 @@ void MetalRenderer::setImage(std::uint32_t width, std::uint32_t height,
     
     // 4. 创建 staging buffer
     id<MTLBuffer> stagingBuffer =
-        [m_impl->device newBufferWithBytes:staging.data()
-                                    length:staging.size()
-                                   options:MTLResourceStorageModeShared];
+        [device newBufferWithBytes:staging.data()
+                            length:staging.size()
+                           options:MTLResourceStorageModeShared];
     if (stagingBuffer == nil) {
         throw std::runtime_error("创建 Metal 暂存缓冲失败");
     }
@@ -461,7 +390,9 @@ void MetalRenderer::setImage(std::uint32_t width, std::uint32_t height,
     // A: 这里的 encoder 不是 对应 command 系列，而是对应 CopyTextureRegion
     //    blit 是历史术语，意思是 block image transfer：块拷贝/块填充。
     //    MTLBlitCommandEncoder 是专门录制“拷贝类命令”的 encoder。
-    id<MTLCommandBuffer> commandBuffer = [m_impl->queue commandBuffer];
+    m_impl->context->beginCommandList();
+    id<MTLCommandBuffer> commandBuffer =
+        (__bridge id<MTLCommandBuffer>)m_impl->context->commandBuffer();
     id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
 
     // buffer → texture 拷贝， 相当于录制拷贝命令
@@ -475,14 +406,9 @@ void MetalRenderer::setImage(std::uint32_t width, std::uint32_t height,
         destinationLevel:0
        destinationOrigin:MTLOriginMake(0, 0, 0)];
     [blit endEncoding];
-    [commandBuffer commit];
 
-    // 6. wait for gpu
-    [commandBuffer waitUntilCompleted];
-
-    if (commandBuffer.status == MTLCommandBufferStatusError) {
-        throw std::runtime_error("Metal 纹理上传失败: " + nsErrorText(commandBuffer.error));
-    }
+    // 6. 由 context 负责 commit + wait（失败会抛异常）
+    m_impl->context->submitAndWait();
 
     // 7. 保存状态
     // 把“当前渲染器要显示哪张图”这个状态更新掉

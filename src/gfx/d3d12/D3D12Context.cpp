@@ -30,17 +30,6 @@ D3D12Context::~D3D12Context()
     }
 }
 
-/* ==================== 访问器 ==================== */
-ID3D12GraphicsCommandList *D3D12Context::commandList() const    { return m_commandList.Get(); }
-D3D12_CPU_DESCRIPTOR_HANDLE D3D12Context::currentRtv() const    { return m_rtvHandles[m_frameIndex]; }
-ID3D12Device *D3D12Context::device() const                      { return m_device.Get(); }
-ID3D12CommandQueue *D3D12Context::queue() const                 { return m_queue.Get(); }
-IDXGIAdapter1 *D3D12Context::adapter() const                    { return m_adapter.Get(); }
-IDXGISwapChain3 *D3D12Context::swapChain() const                { return m_swapChain.Get(); }
-DXGI_FORMAT D3D12Context::swapChainFormat() const               { return kSwapChainFormat; }
-std::uint32_t D3D12Context::width() const                       { return m_width; }
-std::uint32_t D3D12Context::height() const                      { return m_height; }
-std::uint32_t D3D12Context::frameIndex() const                  { return m_frameIndex; }
 
 /* ==================== Initialize ==================== */
 void D3D12Context::initialize(void *nativeWindow, std::uint32_t width, std::uint32_t height)
@@ -295,5 +284,17 @@ void D3D12Context::waitForGpu() // cpu wait for gpu to finish all commands in th
                        "SetEventOnCompletion");
     WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
 }
+
+/* ==================== 访问器 ==================== */
+ID3D12GraphicsCommandList *D3D12Context::commandList() const    { return m_commandList.Get(); }
+D3D12_CPU_DESCRIPTOR_HANDLE D3D12Context::currentRtv() const    { return m_rtvHandles[m_frameIndex]; }
+ID3D12Device *D3D12Context::device() const                      { return m_device.Get(); }
+ID3D12CommandQueue *D3D12Context::queue() const                 { return m_queue.Get(); }
+IDXGIAdapter1 *D3D12Context::adapter() const                    { return m_adapter.Get(); }
+IDXGISwapChain3 *D3D12Context::swapChain() const                { return m_swapChain.Get(); }
+DXGI_FORMAT D3D12Context::swapChainFormat() const               { return kSwapChainFormat; }
+std::uint32_t D3D12Context::width() const                       { return m_width; }
+std::uint32_t D3D12Context::height() const                      { return m_height; }
+std::uint32_t D3D12Context::frameIndex() const                  { return m_frameIndex; }
 
 } // namespace chroma::render

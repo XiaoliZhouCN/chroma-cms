@@ -15,14 +15,19 @@ if(WIN32)
     target_compile_definitions(chroma_gfx PUBLIC
         NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
 elseif(APPLE)
-    # MetalContext 落地前保持 INTERFACE（避免空静态库）。
-    add_library(chroma_gfx INTERFACE)
-    target_link_libraries(chroma_gfx INTERFACE
+    # MetalContext 落地后：和 Windows 一样是 STATIC，末尾的作用域判定会自动变回 PUBLIC。
+    add_library(chroma_gfx STATIC
+        metal/MetalContext.hpp
+        metal/MetalContext.mm)
+    target_link_libraries(chroma_gfx PUBLIC
         "-framework Foundation"
         "-framework AppKit"
         "-framework Metal"
         "-framework QuartzCore"
         "-framework CoreGraphics")
+    # MetalContext.mm 里的 id<...>/CAMetalLayer/NSView 用 ARC 管，与 chroma_render 保持一致。
+    target_compile_options(chroma_gfx PRIVATE
+        "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
 else()
     add_library(chroma_gfx INTERFACE)
 endif()
