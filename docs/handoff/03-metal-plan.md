@@ -3,6 +3,11 @@
 > 目标：用**同一套架构、共享同一段色彩数学**，在 macOS 上从零手写一个 Metal 渲染器。
 > 当前两端的最后色域矩阵不同（Windows 709 / macOS P3），所以**不要求逐像素一致**；
 > 共享到 XYZ，最后一步按平台分别断言。
+>
+> ⚠️ **2026-11-09 重构后**：`MetalRenderer.*` 已移到 `src/render/metal/`；
+> macOS 下一步是抽 `src/gfx/metal/MetalContext`（可执行的任务清单见
+> [`08-current-progress.md`](08-current-progress.md) §6）。本文件的原理与映射表仍然有效，
+> 但 §3 / §8 里写的 `src/render/MetalRenderer.*` 路径以仓库现状为准。
 
 
 ---

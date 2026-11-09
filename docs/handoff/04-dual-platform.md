@@ -2,6 +2,11 @@
 
 > 目标：Windows(D3D12) 与 macOS(Metal) 共用同一套窗口层、解码层、交互接口与验收标准。
 >
+> ⚠️ **2026-11-09 重构后**：目录变为 `src/gfx/<api>/`（原生上下文）+ `src/render/<api>/`（后端绘制），
+> 即 `gfx/d3d12/D3D12Context`、`render/d3d12/`、`render/metal/`。
+> 本文件 §1 / §2 / §3 的路径与代码片段是重构前的**设计记录**；当前实现与 CMake 以仓库现状为准，
+> 进度与 mac 任务见 [`08-current-progress.md`](08-current-progress.md)。
+>
 > **当前色域是刻意分离的**：Windows 输出 BT.709/scRGB（`outputScale=0.8`），
 > macOS 输出 Display-P3 线性（`outputScale=1.0`）。共享 PQ 与 BT.2020→XYZ，
 > 最后一步矩阵按平台不同；不要追求逐像素一致。

@@ -4,6 +4,10 @@
 > 基线：`practice` @ `e545d91`（macOS 侧已在真机验证）。
 >
 > 这份文档是**给 Windows 侧 agent 的交接单**。先读 `AGENTS.md` 和 `01`–`04`，再看本文件。
+>
+> ✅ **2026-11-09 状态：本文件的 5 处改动已全部完成并提交（`42518f8`），保留作原理 / 验收参考。**
+> 重构后路径：`src/render/d3d12/D3D12Renderer.{hpp,cpp}`；当前进度见
+> [`08-current-progress.md`](08-current-progress.md)。
 
 ---
 

@@ -118,6 +118,7 @@ screencapture -x -o -l"$(osascript -e 'tell app "System Events" to id of window 
 | `dyld: Library not loaded: @rpath/QtWidgets.framework/...` | 同上 | 同上；发布时用 `macdeployqt` |
 | `FFmpeg: 打不开文件` / 链接找不到 `avcodec` | FFmpeg 路径没被找到 | `-DFFMPEG_ROOT=$(brew --prefix ffmpeg)` 重新 configure |
 | `CMAKE_OBJCXX_COMPILER not set` | 顶层没 `enable_language(OBJCXX)` | 按 04 §3.1 改 CMakeLists |
+| configure 报 `may only set INTERFACE properties on INTERFACE targets` | `src/gfx/CMakeLists.txt` 的 APPLE 分支是 INTERFACE 库，却用了 PUBLIC / `chroma_set_warnings` | 已按目标类型判定作用域（见 `08` §3.5）；若复现说明该文件被回退 |
 | `framework not found Metal` | 平台库分支没写对 | 检查 `src/gfx/CMakeLists.txt` 的 APPLE 分支 |
 | 窗口黑屏但无报错 | `CAMetalLayer` 没挂上 / 没设置 colorspace | 检查 `view.wantsLayer`、`view.layer`、`layer.colorspace` |
 | 画面整体偏暗 | 用了默认 sRGB colorspace 但输出线性值 | 显式 `kCGColorSpaceExtendedLinearSRGB` |
@@ -133,3 +134,4 @@ screencapture -x -o -l"$(osascript -e 'tell app "System Events" to id of window 
 - [ ] `Contents/MacOS/shaders/` 里有着色器文件
 - [ ] 运行后窗口出现，控制台打印 `[gfx] backend = Metal`
 - [ ] 截图能看到画面（不是黑图）
+- [ ] （MetalContext 拆分后）`src/gfx/metal/MetalContext.{hpp,mm}` 存在且被 `chroma_gfx` 编译

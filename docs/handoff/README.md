@@ -1,7 +1,8 @@
 # ChromaCMS · 交接文档（handoff）
 
 > 这套文档的用途：**让 Windows / macOS 两侧的 AI 协作 agent 能互相接续进度**。
-> macOS 侧已完成 M1–M4 与 90° 交互；现在回到 Windows 适配交互（见 `07`）。
+> Windows 侧已完成交互适配（`42518f8`）与渲染层重构（`gfx` 上下文层 + 后端分目录）；
+> 现在转到 macOS，做对应的 `MetalContext` 拆分（见 **`08`**）。
 
 ## 阅读顺序
 
@@ -12,10 +13,11 @@
 | 3 | [`03-metal-plan.md`](03-metal-plan.md) | Metal 移植方案：D3D12→Metal 映射、MSL 着色器、路线图 M1–M5 |
 | 4 | [`04-dual-platform.md`](04-dual-platform.md) | 双平台架构：渲染器工厂、CMake 条件、一致性测试 |
 | 5 | [`05-macos-setup.md`](05-macos-setup.md) | macOS 环境搭建、构建、截图、排错 |
-| 6 | [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) | 可直接粘贴给新 agent 的启动提示词 |
-| 7 | [`07-windows-interaction.md`](07-windows-interaction.md) | **Windows 交互适配**：IViewTransform、8×float 常量、90° 矩阵 UV |
+| 6 | [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) | 启动提示词（历史；Mac 用 `08` §11 的新版） |
+| 7 | [`07-windows-interaction.md`](07-windows-interaction.md) | Windows 交互适配（✅ 已完成，保留作原理参考） |
+| 8 | [`08-current-progress.md`](08-current-progress.md) | **当前进度**：Windows 交互落地 + 渲染层重构 + **macOS 的 MetalContext 拆分方案** |
 
-## 当前进度（截至 `practice` @ `e545d91`）
+## 当前进度（`practice` @ `42518f8` + 本次重构提交）
 
 ```
 Windows / D3D12（用户手写，agent 指导）
@@ -26,6 +28,9 @@ Windows / D3D12（用户手写，agent 指导）
   ✅ 5  FFmpeg 解码 PNG → RGBA16 → 上屏
   ✅ 6.1 色彩管理（单 pass）：PQ EOTF → 2020→XYZ→709 线性 → scRGB（16F 输出，无 OETF）
   ✅ 6.2 根常量传参（outputScale = 0.8）
+  ✅ 7  交互：A/D 90° 旋转、Q/E 缩放、R 复位（8×float 常量 + 2×2 矩阵 UV）   [42518f8]
+  ✅ 8  渲染层重构：新增 gfx/d3d12/D3D12Context（设备/交换链/同步/帧生命周期），
+        D3D12Renderer 只留绘制；后端按 render/<api>/ 分目录              [本次提交]
   ⬜ 6.3 HDR / 色调映射 / 跨屏自适应
 
 macOS / Metal
@@ -34,12 +39,16 @@ macOS / Metal
   ✅ M3 纹理上传 + 采样
   ✅ M4 色彩管线：PQ → 2020→XYZ → 2020→Display-P3 线性
   ✅ 交互：A/D 90° 旋转、Q/E 缩放、R 复位（矩阵 UV）
-  ⬜ M5 双平台一致性验证
+  ⬜ M4.6 MetalContext 拆分（与 gfx::D3D12Context 对偶）   ← 下一步，见 08 §6
+  ⬜ M5 双平台一致性验证（CPU ColorMath + CSV 断言）
 
-Windows / D3D12
-  ⬜ 交互适配：给 D3D12Renderer 实现 IViewTransform      ← 下一步
-  ⬜ 双平台一致性（CPU ColorMath + CSV 断言）
+第三后端（准备中）
+  ⬜ SkiaRenderer（Ganesh）：cmake/FindSkia.cmake + docs/third-party/skia.md 已有，
+     尚未接进构建图
 ```
+
+**重构后的目录约定**：`src/gfx/<api>/` 放该平台的原生上下文（设备/交换链/同步），
+`src/render/<api>/` 放后端绘制实现；详见 `08` §3。
 
 ## 验收截图
 
@@ -62,6 +71,7 @@ Windows / D3D12
 
 ## 给新 agent 的第一句话
 
-macOS：把 [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) 粘贴给 macOS 上的 agent。
+Mac：把 [`08-current-progress.md`](08-current-progress.md) 的 §11 启动提示词粘贴给 macOS 上的 agent
+（它自带"先读哪些文件 + 第一个任务 = MetalContext 拆分"）。
 
-Windows：把 [`07-windows-interaction.md`](07-windows-interaction.md) 连同 `AGENTS.md` 一起交给 Windows 上的 agent。
+Windows：`AGENTS.md` + `01` 即可；如果要继续改渲染器，再读 `08` §3（重构后的分层）。

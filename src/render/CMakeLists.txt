@@ -1,3 +1,12 @@
+# 渲染层：契约层（本目录）+ 各后端实现（子目录）。
+#
+#   IRenderer.hpp / IViewTransform.hpp / RendererFactory.*   平台无关契约
+#   d3d12/                                                    Windows 后端
+#   metal/                                                    macOS 后端
+#   skia/                                                     （待加，第三后端）
+#
+# 每个后端只依赖 chroma_gfx（原生上下文层），互相之间不引用。
+
 set(_chroma_render_sources
     IRenderer.hpp
     IViewTransform.hpp
@@ -6,12 +15,12 @@ set(_chroma_render_sources
 
 if(WIN32)
     list(APPEND _chroma_render_sources
-        D3D12Renderer.hpp
-        D3D12Renderer.cpp)
+        d3d12/D3D12Renderer.hpp
+        d3d12/D3D12Renderer.cpp)
 elseif(APPLE)
     list(APPEND _chroma_render_sources
-        MetalRenderer.hpp
-        MetalRenderer.mm)
+        metal/MetalRenderer.hpp
+        metal/MetalRenderer.mm)
 endif()
 
 add_library(chroma_render STATIC ${_chroma_render_sources})

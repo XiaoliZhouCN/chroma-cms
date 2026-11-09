@@ -37,15 +37,19 @@ ChromaCMS 是一个**手写渲染器**练习项目：用 Qt 做窗口，用自�
 | 4 | `docs/handoff/03-metal-plan.md` | **macOS/Metal 移植方案**（D3D12→Metal 映射、MSL、路线图） |
 | 5 | `docs/handoff/04-dual-platform.md` | 双平台架构：渲染器工厂、CMake 条件、一致性测试 |
 | 6 | `docs/handoff/05-macos-setup.md` | macOS 环境搭建与排错 |
-| 7 | `docs/handoff/06-bootstrap-prompt.md` | 给新 agent 的启动提示词（用户可直接粘贴） |
-| 8 | `docs/handoff/07-windows-interaction.md` | **Windows 交互适配**：IViewTransform、90° 矩阵 UV、root constants |
+| 7 | `docs/handoff/06-bootstrap-prompt.md` | 给新 agent 的启动提示词（历史；新的 mac 启动词在 `08` §11） |
+| 8 | `docs/handoff/07-windows-interaction.md` | Windows 交互适配（✅ 已完成，保留作原理参考） |
+| 9 | `docs/handoff/08-current-progress.md` | **当前进度**：Windows 交互 + 渲染层重构 + **macOS 的 MetalContext 拆分方案** |
 
 ## 3. 平台现状
 
 | 平台 | 后端 | 进度 |
 |---|---|---|
-| Windows | 自写 D3D12 | 设备/交换链 → 三角形 → 纹理 → FFmpeg 解码 → PQ 色彩管线（单 pass，scRGB 16F 输出）✅；**交互待适配** |
-| macOS | 自写 Metal | M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互 ✅；M5 一致性待做 |
+| Windows | 自写 D3D12 | 设备/交换链 → 三角形 → 纹理 → FFmpeg 解码 → PQ 色彩管线（单 pass，scRGB 16F）✅；交互（A/D/Q/E/R）✅（`42518f8`）；渲染层重构：`gfx/d3d12/D3D12Context` + `render/d3d12/D3D12Renderer` ✅ |
+| macOS | 自写 Metal | M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互 ✅；**M4.6 MetalContext 拆分待做**（见 `08` §6）；M5 一致性待做 |
+
+> 目录约定（重构后）：`src/gfx/<api>/` 放原生上下文（设备/交换链/同步），
+> `src/render/<api>/` 放后端绘制；两者各自按平台条件编译。
 
 两块屏的实际情况（Windows 侧已探测）：内屏 SDR/8bpc，外接 ASUS VG32AQL1A 通过 HDMI 2560×1440@60
 且 **HDR 已启用**、8bpc。所以"同一套颜色输出在两块屏上表现不同"是预期现象。
@@ -88,6 +92,9 @@ open build/macos-arm64-debug/ChromaCMS.app    # 或直接跑 .app/Contents/MacOS
 | 通用 | 空 `.cpp` 会让 AUTOMOC 警告 | 填上内容即消失，不影响构建 |
 | macOS | 截图需要"屏幕录制"权限 | 系统设置 → 隐私与安全性 → 屏幕录制，给终端授权 |
 | macOS | Qt 来自 Homebrew 时 `find_package(Qt6)` 需要前缀 | 设置 `QT_ROOT`（预设已用 `$penv{QT_ROOT}`） |
+| macOS | `INTERFACE` 库上用了 `PUBLIC`/`PRIVATE` 目标属性 → configure 直接失败 | CMake 规则：INTERFACE 库只能设 INTERFACE 属性；`src/gfx/CMakeLists.txt` 已按目标类型判定作用域 |
+| macOS | `src/gfx/metal/` 空目录不会进 git，clone 后不存在 | agent 建 `MetalContext` 空文件时先建目录 |
+| macOS | `MetalContext.hpp` 若 include `<Metal/Metal.h>`，纯 CXX 的 `RendererFactory.cpp` 编不过 | 头文件纯 C++ + pimpl + `void*` 句柄，ObjC 类型只出现在 `.mm` |
 
 ## 6. 交付时的自检清单
 

@@ -1,14 +1,15 @@
 # 01 · 项目现状（Project State）
 
-> 快照时间：macOS 侧完成 M1–M4 与 90° 交互之后。
-> 分支 `practice` @ `e545d91`。Windows 侧下一步是交互适配（见 `07-windows-interaction.md`）。
+> 快照时间：Windows 交互落地（`42518f8`）与渲染层重构之后。
+> 分支 `practice` @ `42518f8` + 重构提交；目录结构与进度的最新说明以
+> [`08-current-progress.md`](08-current-progress.md) 为准。
 
 ## 1. Git
 
 | 项 | 值 |
 |---|---|
 | 工作分支 | `practice` |
-| HEAD | `e545d91 feat(metal): add Metal backend with Display-P3 pipeline and view controls` |
+| HEAD | `42518f8 [win][image] sync interaction`（+ 之后的渲染层重构提交） |
 | 远端 | `git@github-shirley:XiaoliZhouCN/chroma-cms.git`（SSH 别名 `github-shirley`） |
 | 参考实现分支 | `develop` @ `86f1ea2`（**与 practice 无共同祖先**，只能按文件借用） |
 | 参考实现 tag | `ref-impl-m1`（本地存在；若 mac 上没有，用 `git show develop:<path>`） |
@@ -20,23 +21,26 @@
 
 ```
 CMakeLists.txt                 顶层：C++20、Qt6(Core/Gui/Widgets)、include 两个 cmake 模块
-CMakePresets.json              windows-x64-debug / release（本次交接补了 macos-*）
+CMakePresets.json              windows-x64-* / macos-arm64-* / macos-x64-*
 cmake/
   QtBootstrap.cmake            实为 chroma_set_warnings()：MSVC /W4 /utf-8，GCC/Clang -Wall
-  CompilerWarnings.cmake       （历史遗留拆分）
+  CompilerWarnings.cmake       （历史遗留拆分，内部实为 Qt 定位）
   FindFFmpeg.cmake             定位 external/ffmpeg，产出 FFmpeg::FFmpeg
+  FindSkia.cmake               定位预编译 Skia（Windows/D3D12），产出 Skia::Skia（尚未接线）
+docs/third-party/skia.md       Skia M155 预编译包清单与消费约束
 shaders/
-  fullscreen.hlsl              Windows：VS(全屏三角形) + PS(PQ → 709 → scRGB)
+  fullscreen.hlsl              Windows：VS(全屏三角形) + PS(PQ → 709 → scRGB) + 矩阵 UV
   fullscreen.metal             macOS：VS + PS(PQ → Display-P3)，运行时由 Metal 编译
 src/
   core/Version.hpp             版本号（INTERFACE 库 chroma_core）
-  gfx/D3D12Common.hpp          ComPtr / ThrowIfFailed（INTERFACE 库 chroma_gfx）
+  gfx/D3D12Common.hpp          ComPtr / ThrowIfFailed
+  gfx/d3d12/D3D12Context.{hpp,cpp}  Windows 原生上下文：设备/队列/交换链/RTV/命令录制/fence
   media/ImageLoader.{hpp,cpp}  FFmpeg 解码 → RGBA16；路径统一 UTF-8（chroma_media）
   render/IRenderer.hpp         平台无关渲染器接口（未改签名）
   render/IViewTransform.hpp    可选交互接口：setQuarterTurns / setZoom
   render/RendererFactory.{hpp,cpp} 按平台创建 D3D12 / Metal
-  render/D3D12Renderer.{hpp,cpp} 手写 D3D12 后端（Windows）
-  render/MetalRenderer.{hpp,mm}  手写 Metal 后端（macOS）
+  render/d3d12/D3D12Renderer.{hpp,cpp}  D3D12 后端（只画：根签名/PSO/纹理/常量/Draw）
+  render/metal/MetalRenderer.{hpp,mm}   Metal 后端（设备/图层仍在自己身上，待拆 MetalContext）
   app/main.cpp                 加载图片 → MainWindow
   app/MainWindow.{hpp,cpp}     窗口 + 状态栏
   app/ViewportWidget.{hpp,cpp} 原生表面宿主 + A/D/Q/E/R 交互
@@ -56,7 +60,8 @@ tools/
 | 4 | 纹理上传 + SRV | 默认堆纹理 + UPLOAD 缓冲 + `GetCopyableFootprints` 行对齐 + `CopyTextureRegion` + 屏障 + SRV |
 | 5 | FFmpeg 解码 | `avformat/avcodec/swscale` → `AV_PIX_FMT_RGBA64LE`；识别并还原 `value16 = code10 << 6` |
 | 6.1 | 色彩管理（单 pass） | PQ EOTF → BT.2020→XYZ→BT.709 线性 → `/80` 得 scRGB 单位；**不做 OETF** |
-| 6.2 | 根常量传参 | 根参数 1 = 4×DWORD 根常量（b0），`outputScale` 已实测生效（1.0 → 窗口均亮度 94.7，0.0 → 31.2） |
+| 6.2 | 根常量传参 | 根参数 1 = 8×DWORD 根常量（b0），`outputScale` 已实测生效（1.0 → 窗口均亮度 94.7，0.0 → 31.2） |
+| 7 | 交互（Windows） | `IViewTransform` + 8×float（outputScale/aspect/m00..m11）+ 2×2 矩阵 UV + `discard` + 90° 交换宽高比；A/D/Q/E/R（`42518f8`） |
 
 ### 已实现的能力（macOS / Metal）
 
@@ -113,9 +118,11 @@ code（归一化 PQ 码值）
 
 ## 4. 同步模型（当前是"全同步"，故意简单）
 
+> 重构后归 `gfx::D3D12Context` 管（`src/gfx/d3d12/D3D12Context.cpp`）。
+
 - 单个 `ID3D12Fence` + 单个 `m_fenceValue`；
 - `waitForGpu()` = `Signal` → `SetEventOnCompletion` → `WaitForSingleObjectEx(INFINITE)`；
-- 调用点：析构、纹理上传后、`present()` 开头、`resize()` 开头；
+- 调用点：`D3D12Context` 析构、`submitAndWait()`（纹理上传后）、`beginFrame()` 开头、`resize()` 开头；
 - **没有** 双帧在飞（每帧一个 allocator + 每帧 fence 值）——这是已知的优化项。
 
 ## 5. Windows 环境（已实测）
@@ -150,12 +157,15 @@ python tools/gen_ptmr.py --out assets/test-images/PTMR_9-16-9-full_2048x2048_10b
 
 | 项 | 说明 |
 |---|---|
-| Windows 交互 | `D3D12Renderer` 还没实现 `IViewTransform` → 见 `07-windows-interaction.md` |
+| Windows 交互 | ✅ 已完成（`42518f8`）；重构后行为不变，见 `08` §2 |
+| macOS MetalContext | ⬜ `MetalRenderer` 还没拆出 `gfx/metal/MetalContext` → 见 `08` §6（下一步） |
+| Skia 第三后端 | ⬜ `FindSkia.cmake` / `docs/third-party/skia.md` 已就绪，但**未接进构建图**、无 `SkiaRenderer`；见 `08` §5 |
 | macOS EDR | `CAEDRMetadata` / tone mapping 未做；`outputScale=1.0` 高光逐通道裁剪 |
 | 色调映射 | 两平台都还没有自己的 BT.2390 |
 | 一致性测试 | 没有 CPU 参考实现与单元测试；目前靠离屏回读/截图人工对照 |
 | 性能 | 全同步；Windows 单 allocator，Metal 每帧 `waitUntilCompleted` |
 | 非方图旋转 | contain-fit 已按 90° 交换宽高比，但 PTMR 是方图，尚未用非方图实测 |
+| 重构后小问题 | `D3D12Renderer::present()` 无图时也会 Draw、注释/命名空间小错等 5 条；见 `08` §3.7 |
 
 ## 8. 验证证据
 
@@ -168,3 +178,4 @@ python tools/gen_ptmr.py --out assets/test-images/PTMR_9-16-9-full_2048x2048_10b
 | macOS 90° 交互 | `images/macos-90.png` |
 | macOS 180° + 缩放 | `images/macos-180-zoom.png` |
 | macOS R 复位 | `images/macos-reset.png` |
+| 重构后 Windows 复核 | 构建/ctest/GUI/交互 diff 见 `08` §4（截图在 `temp_and_scratch/verify/`，未入库） |

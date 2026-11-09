@@ -1,4 +1,4 @@
-#include "render/MetalRenderer.hpp"
+#include "render/metal/MetalRenderer.hpp"
 
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>

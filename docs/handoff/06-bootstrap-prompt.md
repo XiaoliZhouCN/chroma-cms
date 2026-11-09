@@ -1,8 +1,8 @@
 # 06 · 给 macOS agent 的启动提示词
 
-> **状态（2026-11-09）**：macOS 侧已完成 M1–M4 + 90° 交互（`practice` @ `e545d91`）。
-> 这份提示词是当时 M1 的启动词，保留作历史参考。
-> 现在回到 Windows 适配交互，请看 [`07-windows-interaction.md`](07-windows-interaction.md)。
+> **状态（2026-11-09）**：这是 M1 时的历史启动词，保留作参考。
+> Windows 交互已完成，现在转到 macOS 做 MetalContext 拆分；
+> **新的启动提示词在 [`08-current-progress.md`](08-current-progress.md) §11**。
 
 > 用法：在 macOS 上开一个新的 agent 会话，把下面**整段**粘贴进去。
 > 它是自包含的——不依赖 Windows 侧会话的上下文。

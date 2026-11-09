@@ -3,9 +3,9 @@
 #include "render/IRenderer.hpp"
 
 #if defined(_WIN32)
-#include "render/D3D12Renderer.hpp"
+#include "render/d3d12/D3D12Renderer.hpp"
 #elif defined(__APPLE__)
-#include "render/MetalRenderer.hpp"
+#include "render/metal/MetalRenderer.hpp"
 #else
 #error "ChromaCMS: 暂不支持的平台"
 #endif

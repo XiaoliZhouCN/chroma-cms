@@ -12,8 +12,8 @@
   1. 绘制-即数据传输
     1.1 传输手段
     CPU --buffer--> GPU --buffer--> CPU
-    - 数据放在哪，谁(CPU、GPU)怎么读，
-    1.2 传输效率
+       - 数据放在哪，谁(CPU、GPU)怎么读，
+1.2 传输效率
     1.3 同步/异步，
   2. 执行命令传输
 
@@ -35,7 +35,7 @@ ViewportWidget::showEvent()
 
 ViewportWidget::resizeEvent()
 
-- m_renderer-reseize()
+- m_renderer->reseize()
 - update()
 
 ViewportWidget::paintEvent()
@@ -100,6 +100,5 @@ D3D12Renderer::createDeviceAndQueue()
   > Q: factory 的作用是什么？
   > Q: D3D12 和 DXGI 分别是什么？二者什么关系？
   > Q: device 和 factory 的区别是什么？二者什么关系？
-
 
 D3D12Renderer::waitForGpu()
