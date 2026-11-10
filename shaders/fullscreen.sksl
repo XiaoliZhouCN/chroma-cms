@@ -1,0 +1,48 @@
+uniform shader image;
+uniform float2 imageSize;     // 源图尺寸(px)
+uniform float  outputScale;   // Windows 0.8 / mac 1.0
+uniform float3x3 xyzToTarget; // XYZ -> 目标线性 RGB（列主序）
+
+// ---- 色彩常量（与 fullscreen.hlsl / fullscreen.metal 一致）----
+const float kPqPeakNits   = 10000.0;
+const float kScRgbRefNits = 80.0;
+
+float3 PqEotf(float3 code) {
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+
+    float3 p = pow(max(code, float3(0.0)), float3(1.0 / m2));
+    float3 numerator = max(p - float3(c1), float3(0.0));
+    float3 denominator = float3(c2) - float3(c3) * p;
+    return pow(numerator / max(denominator, float3(1e-6)), float3(1.0 / m1));
+}
+
+// BT.2020 线性 RGB -> CIE XYZ (D65)，按列初始化（HLSL 行矩阵的转置）
+const float3x3 kRec2020ToXYZ = float3x3(
+    0.636958, 0.262700, 0.000000,
+    0.144617, 0.677998, 0.028073,
+    0.168881, 0.059302, 1.060985);
+
+half4 main(float2 coord) {
+    // coord 已被 makeShader 的 localMatrix 变成"图片像素坐标"：
+    // contain-fit / 旋转 / 缩放全部在 CPU 侧合成，这里只判断是否落在图内。
+    if (coord.x < 0.0 || coord.x > imageSize.x ||
+        coord.y < 0.0 || coord.y > imageSize.y) {
+        return half4(0.02, 0.02, 0.02, 1.0);
+    }
+
+    float3 code       = float3(image.eval(coord).rgb);   // 归一化 PQ 码值
+    float3 linear2020 = PqEotf(code);
+    float3 xyz        = kRec2020ToXYZ * linear2020;
+    float3 target     = xyzToTarget * xyz;
+
+    target = max(target, float3(0.0));
+
+    float3 nits   = target * kPqPeakNits;
+    float3 scaled = (nits / kScRgbRefNits) * outputScale;
+
+    return half4(scaled.x, scaled.y, scaled.z, 1.0);
+}

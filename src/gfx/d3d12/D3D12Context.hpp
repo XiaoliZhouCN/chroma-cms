@@ -37,6 +37,7 @@ public:
     ID3D12CommandQueue  *queue() const;
     IDXGIAdapter1       *adapter() const;
     IDXGISwapChain3     *swapChain() const;
+    ID3D12Resource      *currentBackBuffer() const;
     DXGI_FORMAT          swapChainFormat() const;
 
     std::uint32_t width() const;
@@ -56,6 +57,7 @@ private:
     gfx::ComPtr<IDXGIFactory2>      m_factory;
     gfx::ComPtr<IDXGIAdapter1>      m_adapter;
     gfx::ComPtr<IDXGISwapChain3>    m_swapChain;
+
 
     gfx::ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     std::uint32_t m_rtvDescriptorSize = 0;

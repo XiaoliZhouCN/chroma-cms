@@ -296,5 +296,6 @@ DXGI_FORMAT D3D12Context::swapChainFormat() const               { return kSwapCh
 std::uint32_t D3D12Context::width() const                       { return m_width; }
 std::uint32_t D3D12Context::height() const                      { return m_height; }
 std::uint32_t D3D12Context::frameIndex() const                  { return m_frameIndex; }
+ID3D12Resource *D3D12Context::currentBackBuffer() const         { return m_renderTargets[m_frameIndex].Get(); }
 
 } // namespace chroma::render

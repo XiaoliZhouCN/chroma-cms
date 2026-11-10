@@ -22,7 +22,8 @@ target_compile_definitions(ChromaCMS PRIVATE CHROMA_SOURCE_DIR="${PROJECT_SOURCE
 # 从而让下面的 POST_BUILD 拷贝执行；否则 .app 里会一直是旧 shader。
 set_property(TARGET ChromaCMS APPEND PROPERTY LINK_DEPENDS
     "${PROJECT_SOURCE_DIR}/shaders/fullscreen.hlsl"
-    "${PROJECT_SOURCE_DIR}/shaders/fullscreen.metal")
+    "${PROJECT_SOURCE_DIR}/shaders/fullscreen.metal"
+    "${PROJECT_SOURCE_DIR}/shaders/fullscreen.sksl")
 
 if(APPLE)
     # macOS 生成标准 .app，并把产物放到 build/<preset>/ 根目录，
