@@ -6,6 +6,11 @@
 > 基线：`practice` @ `42518f8`（已提交）+ 本次重构提交
 > `refactor(render): split gfx context layer and backend dirs`（与本文件同一次提交）。
 > 读者：换到 Mac 上的 agent / 用户本人。先读 `AGENTS.md`、`README.md`、`01`、`02`，再读本文件。
+>
+> **2026-11-10 更新**：本文写于 11-09，之后又完成了两件事——
+> ① `822b976` 已把 `MetalContext` 拆出来（§6 的方案已落地，本文 §6 保留为历史方案）；
+> ② `ff89ba9` 新增了 **Skia（Ganesh D3D12）第三后端**。
+> mac 侧的 Skia 适配请看 **[`09-skia-backend.md`](09-skia-backend.md)**，不要按本文继续做 Skia。
 
 ---
 

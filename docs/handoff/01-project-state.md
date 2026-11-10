@@ -1,15 +1,16 @@
 # 01 · 项目现状（Project State）
 
-> 快照时间：Windows 交互落地（`42518f8`）与渲染层重构之后。
-> 分支 `practice` @ `42518f8` + 重构提交；目录结构与进度的最新说明以
-> [`08-current-progress.md`](08-current-progress.md) 为准。
+> 快照时间：Windows 交互落地（`42518f8`）与渲染层重构之后；2026-11-10 又补了 Skia 第三后端。
+> 分支 `practice` @ **`5ebdfa7`**。**最新进度与下一步**以
+> [`README.md`](README.md) 和 [`09-skia-backend.md`](09-skia-backend.md) 为准；
+> [`08-current-progress.md`](08-current-progress.md) 保留为 MetalContext 重构的历史记录。
 
 ## 1. Git
 
 | 项 | 值 |
 |---|---|
 | 工作分支 | `practice` |
-| HEAD | `42518f8 [win][image] sync interaction`（+ 之后的渲染层重构提交） |
+| HEAD | `5ebdfa7 chore: add clang-format config, legacy snapshots and notes`（含 Skia 后端 `ff89ba9`） |
 | 远端 | `git@github-shirley:XiaoliZhouCN/chroma-cms.git`（SSH 别名 `github-shirley`） |
 | 参考实现分支 | `develop` @ `86f1ea2`（**与 practice 无共同祖先**，只能按文件借用） |
 | 参考实现 tag | `ref-impl-m1`（本地存在；若 mac 上没有，用 `git show develop:<path>`） |
@@ -26,7 +27,7 @@ cmake/
   QtBootstrap.cmake            实为 chroma_set_warnings()：MSVC /W4 /utf-8，GCC/Clang -Wall
   CompilerWarnings.cmake       （历史遗留拆分，内部实为 Qt 定位）
   FindFFmpeg.cmake             定位 external/ffmpeg，产出 FFmpeg::FFmpeg
-  FindSkia.cmake               定位预编译 Skia（Windows/D3D12），产出 Skia::Skia（尚未接线）
+  FindSkia.cmake               定位预编译 Skia（Windows/D3D12），产出 Skia::Skia（已接线，Windows）
 docs/third-party/skia.md       Skia M155 预编译包清单与消费约束
 shaders/
   fullscreen.hlsl              Windows：VS(全屏三角形) + PS(PQ → 709 → scRGB) + 矩阵 UV

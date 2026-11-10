@@ -96,9 +96,14 @@ sk_sp<GrDirectContext> ctx = GrDirectContexts::MakeD3D(backend);
    ```
 4. 验证：`cmake/FindSkia.cmake` + 一个最小探针（创建 D3D12 设备 → `MakeD3D` → 打印 milestone）。
 
-## 7. 与本项目的关系（待办）
+## 7. 与本项目的关系
 
-- 计划新增 **Skia 渲染后端**（`SkiaRenderer`，实现 `IRenderer`），与 D3D12 / Metal 并存。
-- 当前 Skia 预编译包只有 **Windows + D3D12 后端**；macOS 需要另建
-  `skia_use_metal=true` 的产物。
+- **Windows：已接入**（`ff89ba9`）。`SkiaRenderer` 实现 `IRenderer` + `IViewTransform`，
+  用 Ganesh D3D12 渲染到 RGBA16F 离屏纹理，再 `CopyResource` 到交换链；
+  SkSL 外置为 `shaders/fullscreen.sksl`（PQ 色彩链 + 交互）。
+  构建开关 `CHROMA_WITH_SKIA=ON`、预设 `windows-x64-skia`，运行时 `CHROMA_BACKEND=skia`。
+  细节与验证见 `docs/handoff/09-skia-backend.md`。
+- **macOS：待做**。当前预编译包只有 Windows + D3D12 后端；mac 需要另建
+  `skia_use_metal=true` 的产物，并在 `FindSkia.cmake` 加 APPLE 分支
+  （参数与步骤见 `09` §4.2）。
 - 由于 `/MD` 限制，Skia 后端只能在 **Release** 预设下构建；Debug 构建不接入 Skia。

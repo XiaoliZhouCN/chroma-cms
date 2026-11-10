@@ -1,8 +1,10 @@
 # ChromaCMS · 交接文档（handoff）
 
 > 这套文档的用途：**让 Windows / macOS 两侧的 AI 协作 agent 能互相接续进度**。
-> Windows 侧已完成交互适配（`42518f8`）与渲染层重构（`gfx` 上下文层 + 后端分目录）；
-> 现在转到 macOS，做对应的 `MetalContext` 拆分（见 **`08`**）。
+> 当前基线：`practice` @ **`5ebdfa7`**。Windows 侧已完成交互适配（`42518f8`）、渲染层重构
+> （`gfx` 上下文层 + 后端分目录，`1575472`）、`MetalContext` 拆分（`822b976`）和
+> **Skia（Ganesh D3D12）第三后端**（`ff89ba9`）。
+> 下一步：按 **`09`** 把 Skia 后端适配到 macOS/Metal。
 
 ## 阅读顺序
 
@@ -13,11 +15,12 @@
 | 3 | [`03-metal-plan.md`](03-metal-plan.md) | Metal 移植方案：D3D12→Metal 映射、MSL 着色器、路线图 M1–M5 |
 | 4 | [`04-dual-platform.md`](04-dual-platform.md) | 双平台架构：渲染器工厂、CMake 条件、一致性测试 |
 | 5 | [`05-macos-setup.md`](05-macos-setup.md) | macOS 环境搭建、构建、截图、排错 |
-| 6 | [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) | 启动提示词（历史；Mac 用 `08` §11 的新版） |
+| 6 | [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) | 启动提示词（历史；Mac 用 `09` §6 的新版） |
 | 7 | [`07-windows-interaction.md`](07-windows-interaction.md) | Windows 交互适配（✅ 已完成，保留作原理参考） |
-| 8 | [`08-current-progress.md`](08-current-progress.md) | **当前进度**：Windows 交互落地 + 渲染层重构 + **macOS 的 MetalContext 拆分方案** |
+| 8 | [`08-current-progress.md`](08-current-progress.md) | 历史进度：Windows 交互 + 渲染层重构 + MetalContext 拆分方案（已完成，见 `822b976`） |
+| 9 | [`09-skia-backend.md`](09-skia-backend.md) | **Skia 第三后端**：Windows 实现细节 + **macOS/Metal 适配方案**（当前重点） |
 
-## 当前进度（`practice` @ `42518f8` + 本次重构提交）
+## 当前进度（`practice` @ `5ebdfa7`）
 
 ```
 Windows / D3D12（用户手写，agent 指导）
@@ -30,7 +33,9 @@ Windows / D3D12（用户手写，agent 指导）
   ✅ 6.2 根常量传参（outputScale = 0.8）
   ✅ 7  交互：A/D 90° 旋转、Q/E 缩放、R 复位（8×float 常量 + 2×2 矩阵 UV）   [42518f8]
   ✅ 8  渲染层重构：新增 gfx/d3d12/D3D12Context（设备/交换链/同步/帧生命周期），
-        D3D12Renderer 只留绘制；后端按 render/<api>/ 分目录              [本次提交]
+        D3D12Renderer 只留绘制；后端按 render/<api>/ 分目录              [1575472]
+  ✅ 9  Skia 第三后端（Windows）：SkiaRenderer（Ganesh D3D12）+ shaders/fullscreen.sksl
+        （PQ 色彩链 + 交互），与手写 D3D12 后端逐像素一致                [ff89ba9]
   ⬜ 6.3 HDR / 色调映射 / 跨屏自适应
 
 macOS / Metal
@@ -39,12 +44,12 @@ macOS / Metal
   ✅ M3 纹理上传 + 采样
   ✅ M4 色彩管线：PQ → 2020→XYZ → 2020→Display-P3 线性
   ✅ 交互：A/D 90° 旋转、Q/E 缩放、R 复位（矩阵 UV）
-  ⬜ M4.6 MetalContext 拆分（与 gfx::D3D12Context 对偶）   ← 下一步，见 08 §6
+  ✅ M4.6 MetalContext 拆分（与 gfx::D3D12Context 对偶）              [822b976]
   ⬜ M5 双平台一致性验证（CPU ColorMath + CSV 断言）
 
-第三后端（准备中）
-  ⬜ SkiaRenderer（Ganesh）：cmake/FindSkia.cmake + docs/third-party/skia.md 已有，
-     尚未接进构建图
+第三后端 Skia（桥接层）
+  ✅ Windows：SkiaRenderer（Ganesh D3D12）+ shaders/fullscreen.sksl（色彩 + 交互）  [ff89ba9]
+  ⬜ macOS：按 `09` §4 抽 SkiaNativeBridge + 写 MetalBridge（下一步）
 ```
 
 **重构后的目录约定**：`src/gfx/<api>/` 放该平台的原生上下文（设备/交换链/同步），
@@ -71,7 +76,8 @@ macOS / Metal
 
 ## 给新 agent 的第一句话
 
-Mac：把 [`08-current-progress.md`](08-current-progress.md) 的 §11 启动提示词粘贴给 macOS 上的 agent
-（它自带"先读哪些文件 + 第一个任务 = MetalContext 拆分"）。
+Mac：把 [`09-skia-backend.md`](09-skia-backend.md) §6 的启动提示词粘贴给 macOS 上的 agent
+（自带"先读哪些文件 + 第一个任务 = Skia 的 MetalBridge 适配"）。
 
-Windows：`AGENTS.md` + `01` 即可；如果要继续改渲染器，再读 `08` §3（重构后的分层）。
+Windows：`AGENTS.md` + `01` 即可；如果要继续改渲染器，再读 `08` §3（重构后的分层）
+和 `09` §2（Skia 实现细节）。
