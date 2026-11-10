@@ -24,6 +24,9 @@ desktop.ini
 *.obj
 *.log
 
+# mac files
+.DS_Store
+
 # ---- 本地临时区：永不提交 ----
 temp_and_scratch/
 /assets/

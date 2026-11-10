@@ -90,6 +90,7 @@ void ViewportWidget::ensureRenderer()
     }
 }
 
+/* ==================== Qt Event ==================== */
 void ViewportWidget::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
