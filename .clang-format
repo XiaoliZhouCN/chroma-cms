@@ -1,0 +1,101 @@
+# ChromaCMS 代码格式化配置（clang-format）
+#
+# 用法：VSCode 里 Ctrl+K Ctrl+F 格式化选区 / Shift+Alt+F 格式化整个文件。
+#
+# 适用范围：C / C++（.cpp/.hpp/.cc…）和 Objective-C++（.mm）/ Objective-C（.m）。
+# 本文件故意不写 Language: 段，所以所有 C 系语言共用下面同一套规则：
+#   - .cpp/.hpp：C/C++ 扩展（ms-vscode.cpptools）内置的 clang-format 读本文件；
+#   - .mm/.m   ：C/C++ 扩展不支持这两个语言，改用 VSCode 的 xaver.clang-format
+#                扩展调用同一个 clang-format，-style=file 仍读本文件
+#                （见 .vscode/settings.json 里的 clang-format.executable / [objective-cpp]）。
+# 本机两条链路用的都是 clang-format 23.1.1（见文末"版本"说明）。
+#
+# 三条规则（用户需求）：
+#   1. namespace 大括号里的内容不额外缩进；
+#   2. 只含一行 if / 函数 + return 的：
+#        - 参数 <= 2 且较短      -> 整体 1 行；
+#        - 参数 <= 4 但内容较长  -> 签名 1 行，{ return ...; } 单独 1 行；
+#        - 参数 >  4            -> 参数逐行 1 个，{ return ...; } 单独 1 行；
+#   3. 多语句函数的大括号跟随现有 .cpp 风格（Allman，单独一行）。
+#
+# .mm 的规则说明：
+#   - .mm 里用 C++ 写的函数（如 MetalContext::Impl 里的方法）与 .cpp 规则完全相同；
+#   - .mm 里的 Objective-C 方法（-(void)foo { ... }）不会被收成一行：clang-format 的
+#     AllowShortFunctionsOnASingleLine 不作用于 ObjC 方法。方法体内部的 if/return 仍按
+#     规则 2 处理（例如 if (...) { return; } 会合成一行）。
+#
+# 注意：clang-format 没有"按参数个数"的条件选项。>4 个参数逐行 1 个，是
+# 靠 ColumnLimit: 100 + BinPackParameters: false 在"签名超过列宽"时近似实现的：
+# 参数少/短时仍会留在 1 行；参数多到超过 100 列时才会逐行拆开。
+---
+BasedOnStyle: LLVM
+
+# ---------- 缩进 ----------
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+
+# ---------- 规则 1：namespace 内不缩进 ----------
+NamespaceIndentation: None
+
+# ---------- 列宽（规则 2 的"较短 / 较长"分界） ----------
+ColumnLimit: 100
+
+# ---------- 规则 2：单行 if / 函数 + return ----------
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortBlocksOnASingleLine: Always
+AllowShortLambdasOnASingleLine: All
+
+# ---------- 大括号位置 ----------
+# 函数定义：大括号单独一行（沿用 .cpp 现有风格）
+# class / struct / enum / namespace / if / for / if-else：大括号跟在行尾（K&R）
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterClass: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterEnum: false
+  AfterNamespace: false
+  AfterExternBlock: false
+  AfterControlStatement: Never
+  BeforeElse: false
+  BeforeCatch: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+# ---------- 参数换行：超宽时每行 1 个参数 ----------
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# 返回类型太长时：优先拆参数，不要把返回类型单独挤到上一行
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+# 关键：项目里有"代码 + 超长行尾注释"的写法（最长 163 列）。
+# 默认 PenaltyExcessCharacter 很大，clang-format 为了给注释腾地方，会把代码
+# 乱断行（例如把 "DXGI_SWAP_CHAIN_DESC1 desc{};" 从中间拆开）。调低它以后，
+# 这类行保持原样，只按"正常断行更划算"的地方换行。
+PenaltyExcessCharacter: 10
+
+# ---------- 注释 ----------
+# 不重排注释（项目里有大量超长中文问答注释）
+ReflowComments: false
+
+# ---------- 其它（保持默认、不额外改动代码语义） ----------
+InsertBraces: false
+RemoveBracesLLVM: false
+SortIncludes: true
+FixNamespaceComments: true
+
+# ---------- 版本说明 ----------
+# 规则 2 里"签名放不下时，把 { return ...; } 收到下一行"依赖较新的 clang-format：
+#   - clang-format 23.1.1（VSCode C/C++ 扩展 1.35.6 内置）→ 符合本文件描述的效果；
+#   - clang-format 21.x（PATH 上的 D:\Applications\LLVM\bin）→ 会退化成普通多行函数体
+#     （即大括号独占一行、return 再缩进一行），其余规则不受影响。
+# 两条 VSCode 格式化链路都固定用 23.1.1：
+#   - .cpp/.hpp：C/C++ 扩展默认就用内置 clang-format，不需要设置 C_Cpp.clang_format_path；
+#   - .mm/.m   ：xaver.clang-format 扩展的 clang-format.executable 已指向 C/C++ 扩展内置的
+#                clang-format.exe（路径在 .vscode/settings.json；升级 C/C++ 扩展后需更新）。

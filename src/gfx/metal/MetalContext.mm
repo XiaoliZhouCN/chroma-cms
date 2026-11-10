@@ -189,17 +189,13 @@ void MetalContext::waitForGpu()
 //    begineCommandList / submitAndWait：一次性上传路径 
 bool MetalContext::beginFrame()
 {
-    if (!m_impl->initialized || m_impl->layer == nil) {
-        return false;
-    }
+    if (!m_impl->initialized || m_impl->layer == nil) { return false; }
     if (m_impl->commandBuffer != nil) {
         throw std::runtime_error("MetalContext::beginFrame: 上一个 command buffer 还没结束");
     }
 
     id<CAMetalDrawable> drawable = [m_impl->layer nextDrawable];
-    if (drawable == nil) {
-        return false;
-    }
+    if (drawable == nil) { return false; }
 
     id<MTLCommandBuffer> commandBuffer = [m_impl->queue commandBuffer];
     if (commandBuffer == nil) {
@@ -257,9 +253,7 @@ void MetalContext::beginCommandList()
 
 void MetalContext::submitAndWait()
 {
-    if (m_impl->commandBuffer == nil) {
-        return;
-    }
+    if (m_impl->commandBuffer == nil) { return; }
 
     id<MTLCommandBuffer> commandBuffer = m_impl->commandBuffer;
     [commandBuffer commit];
