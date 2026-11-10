@@ -433,10 +433,7 @@ void D3D12Renderer::setImage(std::uint32_t width, std::uint32_t height,
 
 void D3D12Renderer::present()
 {
-    if (!m_initialized)
-    {
-        return;
-    }
+    if (!m_initialized) { return; }
 
     m_context->beginFrame();
 
@@ -445,7 +442,8 @@ void D3D12Renderer::present()
 
     commandList->ClearRenderTargetView(rtv, kClearColor, 0, nullptr);
 
-    // 没有图像：只清屏，直接交给 endFrame 呈现（原来的 early - return 分支删掉） if (m_imageWidth > 0 && m_imageHeight > 0)
+    // 没有图像：只清屏，直接交给 endFrame 呈现（原来的 early - return 分支删掉） 
+    if (m_imageWidth > 0 && m_imageHeight > 0)
     {
         commandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
         commandList->SetGraphicsRootSignature(m_rootSignature.Get());
