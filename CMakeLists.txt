@@ -31,7 +31,6 @@ set(CHROMA_DEFAULT_BACKEND "d3d12" CACHE STRING "Default render backend: d3d12|s
 
 # ---- 依赖 ----
 include(cmake/QtBootstrap.cmake)
-include(cmake/CompilerWarnings.cmake)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets)
 qt_standard_project_setup()   # 打开 AUTOMOC/AUTOUIC，并设好 C++ 标准

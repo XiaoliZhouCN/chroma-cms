@@ -3,7 +3,8 @@
 > 读者：**macOS 侧 agent**（以及用户本人）。
 > 目标：把 Windows 上已经跑通的 Skia（Ganesh）第三后端，按"统一桥接"结构镜像到 macOS/Metal。
 > 前置阅读：`AGENTS.md`、`README.md`、`01`、`02`，以及 `08` §3（`gfx` 上下文层）。
-> 基线：`practice` @ **`5ebdfa7`**（Skia 后端已提交）。
+> 基线：`practice` 本次 Skia 重构提交。当前结构/CMake 规范以
+> [`10-skia-refactor-cmake.md`](10-skia-refactor-cmake.md) 为准。
 
 ---
 
@@ -11,7 +12,15 @@
 
 Windows 侧的 `SkiaRenderer` 已经用 **Ganesh D3D12** 跑通：Skia 画到自己的 RGBA16F 离屏纹理，再 `CopyResource` 到交换链；SkSL 外置为 `shaders/fullscreen.sksl`（完整 PQ 色彩链 + 交互），与手写 D3D12 后端**逐像素一致**。
 
-**mac 侧要做的不是重写渲染逻辑**，而是把 Windows 代码里 3 块 D3D12 专属逻辑抽成 `SkiaNativeBridge`，再写一个 Metal 实现；SkSL、色彩链、交互矩阵全部复用。
+**mac 侧要做的不是重写渲染逻辑**，而是把 Windows 代码里 3 块 D3D12 专属逻辑抽成 `SkiaGpuBackend`，再写一个 Metal 实现；SkSL、色彩链、交互矩阵全部复用。
+
+> **2026-11-11 架构整理**：实际实现已按 `docs/ARCHITECTURE_DESIGN.md` 改为
+> `SkiaRenderer` + `SkiaGpuBackend`；本文中旧的 `SkiaNativeBridge` 名称保留为历史记录。
+>
+> **2026-11-11 进展**：macOS 侧 S-M1–S-M4 基础适配已完成。
+> `external/skia-mac/`（M155、arm64、`libskia.a` + `libskcms.a`）、`FindSkia` APPLE 分支、
+> `SkiaGpuBackend` + `SkiaGpuBackendMetal.mm`、`macos-arm64-skia` 预设都已落地；
+> PTMR 图像、resize、A/D/Q/E/R 均已实测（见 §4.7）。下一步是文档收尾 + M5 ColorMath。
 
 ---
 
@@ -193,19 +202,19 @@ sk_sp<SkImage> image = SkImages::RasterFromPixmapCopy(pixmap);
 
 ## 4. macOS 适配方案
 
-### 4.1 目标结构：抽 `SkiaNativeBridge`
+### 4.1 目标结构：抽 `SkiaGpuBackend`（历史名 `SkiaNativeBridge`）
 
 现在 `SkiaRenderer.cpp` 里混着 D3D12 专属逻辑（`gfx::D3D12Context`、`GrDirectContexts::MakeD3D`、D3D 离屏纹理、`CopyResource`）。mac 上要做的第一步是把它们抽出来：
 
 ```
 src/render/skia/
   SkiaRenderer.hpp/.cpp           平台无关：SkSL 加载、SkSurface 绘制、色彩 uniform、交互矩阵、setImage
-  SkiaNativeBridge.hpp            纯 C++ 抽象接口（只被 chroma_render_skia 包含）
-  SkiaNativeBridgeD3D12.cpp       Windows：D3D12Context + 离屏 D3D 纹理 + CopyResource
-  SkiaNativeBridgeMetal.mm        macOS：MetalContext + 离屏 MTLTexture + blit
+  SkiaGpuBackend.hpp              纯 C++ 抽象接口（只被 chroma_render_skia 包含）
+  SkiaGpuBackendD3D12.cpp         Windows：D3D12Context + 离屏 D3D 纹理 + CopyResource
+  SkiaGpuBackendMetal.mm          macOS：MetalContext + 离屏 MTLTexture + blit
 ```
 
-建议接口（`SkiaNativeBridge.hpp`，mac 侧可先照这个写）：
+建议接口（`SkiaGpuBackend.hpp`，最终以实现为准）：
 
 ```cpp
 #pragma once
@@ -219,10 +228,10 @@ class GrDirectContext;
 
 namespace chroma::render
 {
-class SkiaNativeBridge
+class SkiaGpuBackend
 {
 public:
-    virtual ~SkiaNativeBridge() = default;
+    virtual ~SkiaGpuBackend() = default;
 
     virtual bool initialize(void *nativeWindow, std::uint32_t width, std::uint32_t height) = 0;
     virtual void resize(std::uint32_t width, std::uint32_t height) = 0;
@@ -310,15 +319,15 @@ if(CHROMA_WITH_SKIA AND (WIN32 OR APPLE))
     add_library(chroma_render_skia STATIC
         skia/SkiaRenderer.hpp
         skia/SkiaRenderer.cpp
-        skia/SkiaNativeBridge.hpp)
+        skia/SkiaGpuBackend.hpp)
     target_link_libraries(chroma_render_skia PRIVATE Skia::Skia chroma_gfx)
     target_compile_definitions(chroma_render_skia PRIVATE CHROMA_HAS_SKIA=1)
 
     if(WIN32)
-        target_sources(chroma_render_skia PRIVATE skia/SkiaNativeBridgeD3D12.cpp)
+        target_sources(chroma_render_skia PRIVATE skia/SkiaGpuBackendD3D12.cpp)
         target_link_libraries(chroma_render_skia PRIVATE d3d12 dxgi)
     elseif(APPLE)
-        target_sources(chroma_render_skia PRIVATE skia/SkiaNativeBridgeMetal.mm)
+        target_sources(chroma_render_skia PRIVATE skia/SkiaGpuBackendMetal.mm)
         target_link_libraries(chroma_render_skia PRIVATE
             "-framework Metal" "-framework MetalKit" "-framework QuartzCore"
             "-framework CoreGraphics" "-framework Foundation" "-framework AppKit")
@@ -345,11 +354,11 @@ endif()
 
 | 步 | 内容 | 验收 |
 |---|---|---|
-| **S-M1** | 构建 `skia_use_metal=true` 的 mac 包；`FindSkia.cmake` 加 APPLE 分支；建 `SkiaNativeBridge.hpp` + 空实现；CMake 加 APPLE 分支；工厂门控在 mac 也编过 | configure + build 绿（不启用 Skia 时行为不变） |
-| **S-M2** | MetalBridge：Ganesh 创建 + 离屏 MTLTexture + `WrapBackendRenderTarget` + 读取 `fullscreen.sksl`；SkSL 先换成纯色 | 窗口出现纯色（`[gfx] backend = Skia`） |
-| **S-M3** | 恢复 `fullscreen.sksl` 图像采样；`setImage` 的 UNORM16 → SkImage | PTMR 图方向/留边正确 |
-| **S-M4** | 色彩（mac 分支 P3 矩阵 + outputScale 1.0）+ 交互（A/D/Q/E/R） | 与手写 Metal 后端对比；旋转/缩放/复位正常 |
-| **S-M5** | 截图存 `docs/handoff/images/`；更新 `09` 的"mac 验证证据"；跑一次 M5 一致性 | 文档闭环 |
+| **S-M1** ✅ | 构建 `skia_use_metal=true` 的 mac 包；`FindSkia.cmake` 加 APPLE 分支；建 `SkiaGpuBackend.hpp` + 实现；CMake 加 APPLE 分支；工厂门控在 mac 也编过 | configure + build 绿；Debug 构建行为不变 |
+| **S-M2** ✅ | MetalBridge：Ganesh 创建 + 离屏 MTLTexture + `WrapBackendRenderTarget` + 读取 `fullscreen.sksl` | `Skia (Ganesh Metal)` 上屏；PTMR 图正常 |
+| **S-M3** ✅ | 恢复 `fullscreen.sksl` 图像采样；`setImage` 的 UNORM16 → SkImage | PTMR 图方向/留边正确 |
+| **S-M4** ✅ 基础 | 色彩（mac 分支 P3 矩阵 + outputScale 1.0）+ 交互（A/D/Q/E/R）+ resize | A 90°/E 放大/R 复位/resize 正常；与手写 Metal 几何一致 |
+| **S-M5** ⬜ | 截图存 `docs/handoff/images/`；更新 `09` 的 "mac 验证证据"；跑一次 M5 一致性 | 文档闭环 + CPU ColorMath |
 
 ### 4.6 验收标准（mac）
 
@@ -391,7 +400,7 @@ gfx 上下文层重构（822b976）和 Skia（Ganesh D3D12）第三后端（ff89
 
 你的任务是按 09 §4 把 Skia 后端适配到 macOS/Metal：
 - 先构建 skia_use_metal=true 的预编译包 + FindSkia.cmake 的 APPLE 分支；
-- 抽 SkiaNativeBridge（Windows 实现保留，mac 写 SkiaNativeBridgeMetal.mm）；
+- 抽 SkiaGpuBackend（Windows 实现保留，mac 写 SkiaGpuBackendMetal.mm）；
 - 同一份 shaders/fullscreen.sksl、同一套 uniform（48 B，float3x3 = 9 floats）；
 - 交互走 makeShader 的 localMatrix（记得取逆）+ canvas clipRect；
 - 每步在 temp_and_scratch 副本里构建/运行/截图验证后再交付。
@@ -416,3 +425,49 @@ gfx 上下文层重构（822b976）和 Skia（Ganesh D3D12）第三后端（ff89
 | `cmake/FindSkia.cmake` | Windows 分支现状；mac 需要加 APPLE 分支 |
 | `docs/third-party/skia.md` | Skia 预编译包的来源/args/消费约束 |
 | `temp_and_scratch/s3-*`（本地，gitignore） | Windows 验证截图（q0/q90/zoom/skia-vs-d3d12） |
+
+
+### 4.7 macOS 验证证据（2026-11-11）
+
+实测构建：
+
+```text
+cmake --preset macos-arm64-skia
+cmake --build --preset macos-arm64-skia
+→ configure=0 / build=0
+```
+
+运行日志：
+
+```text
+[media] 载入图像: ... 2048 x 2048
+[gfx] MetalContext device = Apple M6
+[skia] backend = Skia (Ganesh Metal), milestone = 155
+[skia] image = 2048 x 2048 (UNORM16 -> kR16G16B16A16_unorm)
+[gfx] backend = Skia (Ganesh Metal)  surface = 1280 x 773  dpr = 1
+```
+
+交互：
+
+- A → 90° 逆时针；
+- E × 2 → 放大；
+- R → 复位；
+- 窗口 resize → 画面跟随，留边正常。
+
+截图：
+
+| 状态 | 文件 |
+|---|---|
+| q0 | `docs/handoff/images/macos-skia-q0.png` |
+| q90 | `docs/handoff/images/macos-skia-q90.png` |
+| zoom | `docs/handoff/images/macos-skia-zoom.png` |
+| R 复位 | `docs/handoff/images/macos-skia-reset.png` |
+| resize | `docs/handoff/images/macos-skia-resize.png` |
+
+同尺寸 Skia vs 手写 Metal 的内容区域截图：
+
+- mean diff ≈ 0.055，max 39；
+- 差异主要来自窗口截图缩放/抗锯齿/采样时机，几何与色彩方向一致；
+- 如需严格逐像素一致，下一步用离屏回读而不是窗口截图。
+
+> 默认 `skia` 预设现在可以正常启动；`macos-arm64-debug` 仍是手写 Metal 后端。

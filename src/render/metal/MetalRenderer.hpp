@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <memory>
 
+namespace chroma::gfx { class MetalContext; }
+
 namespace chroma::render
 {
 class MetalRenderer final : public IRenderer, public IViewTransform

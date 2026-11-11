@@ -1,10 +1,9 @@
 # ChromaCMS · 交接文档（handoff）
 
 > 这套文档的用途：**让 Windows / macOS 两侧的 AI 协作 agent 能互相接续进度**。
-> 当前基线：`practice` @ **`5ebdfa7`**。Windows 侧已完成交互适配（`42518f8`）、渲染层重构
-> （`gfx` 上下文层 + 后端分目录，`1575472`）、`MetalContext` 拆分（`822b976`）和
-> **Skia（Ganesh D3D12）第三后端**（`ff89ba9`）。
-> 下一步：按 **`09`** 把 Skia 后端适配到 macOS/Metal。
+> 当前基线：`practice` 本次 Skia 重构提交。Windows 侧已完成交互、上下文层重构、
+> Skia（Ganesh D3D12）第三后端；macOS 侧已完成 Metal 拆分 + Skia（Ganesh Metal）。
+> 下一步：**Windows 拉取后构建 `windows-x64-skia`，验证 `SkiaGpuBackendD3D12.cpp`**。
 
 ## 阅读顺序
 
@@ -18,9 +17,10 @@
 | 6 | [`06-bootstrap-prompt.md`](06-bootstrap-prompt.md) | 启动提示词（历史；Mac 用 `09` §6 的新版） |
 | 7 | [`07-windows-interaction.md`](07-windows-interaction.md) | Windows 交互适配（✅ 已完成，保留作原理参考） |
 | 8 | [`08-current-progress.md`](08-current-progress.md) | 历史进度：Windows 交互 + 渲染层重构 + MetalContext 拆分方案（已完成，见 `822b976`） |
-| 9 | [`09-skia-backend.md`](09-skia-backend.md) | **Skia 第三后端**：Windows 实现细节 + **macOS/Metal 适配方案**（当前重点） |
+| 9 | [`09-skia-backend.md`](09-skia-backend.md) | Skia 第三后端的实现与 mac 验证记录 |
+| 10 | [`10-skia-refactor-cmake.md`](10-skia-refactor-cmake.md) | **当前重点**：SkiaGpuBackend 重构 + CMakeLists 分层规范 + Windows 继续开发 |
 
-## 当前进度（`practice` @ `5ebdfa7`）
+## 当前进度（本次 Skia 重构提交）
 
 ```
 Windows / D3D12（用户手写，agent 指导）
@@ -44,12 +44,16 @@ macOS / Metal
   ✅ M3 纹理上传 + 采样
   ✅ M4 色彩管线：PQ → 2020→XYZ → 2020→Display-P3 线性
   ✅ 交互：A/D 90° 旋转、Q/E 缩放、R 复位（矩阵 UV）
-  ✅ M4.6 MetalContext 拆分（与 gfx::D3D12Context 对偶）              [822b976]
-  ⬜ M5 双平台一致性验证（CPU ColorMath + CSV 断言）
+  ✅ M4.6 MetalContext 拆分（与 gfx::D3D12Context 对偶）
+  ✅ MetalRenderer 拆分为 .cpp/.mm + MetalRendererImpl.hpp
+  ⬜ M5 双平台一致性验证（CPU ColorMath 基础测试已过，CSV 断言待补）
 
-第三后端 Skia（桥接层）
-  ✅ Windows：SkiaRenderer（Ganesh D3D12）+ shaders/fullscreen.sksl（色彩 + 交互）  [ff89ba9]
-  ⬜ macOS：按 `09` §4 抽 SkiaNativeBridge + 写 MetalBridge（下一步）
+第三后端 Skia（SkiaGpuBackend）
+  ✅ Windows：SkiaRenderer + SkiaGpuBackendD3D12（Ganesh D3D12）
+  ✅ macOS：SkiaRenderer + SkiaGpuBackendMetal（Ganesh Metal）
+  ✅ CMake 分层：每个构建目录一个 CMakeLists；Skia 为可选独立 target
+  ⬜ Windows `SkiaGpuBackendD3D12.cpp` 实机编译/运行（下一步）
+  ⬜ M5 CSV nits 断言
 ```
 
 **重构后的目录约定**：`src/gfx/<api>/` 放该平台的原生上下文（设备/交换链/同步），

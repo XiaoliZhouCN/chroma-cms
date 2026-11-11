@@ -1,5 +1,5 @@
 {
-    "version": 6,
+    "version": 5,
     "cmakeMinimumRequired": {
         "major": 3,
         "minor": 28,
@@ -79,6 +79,16 @@
             }
         },
         {
+            "name": "macos-arm64-skia",
+            "inherits": "macos-arm64",
+            "displayName": "macOS arm64 + Skia (Release only)",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CHROMA_WITH_SKIA": "ON",
+                "CHROMA_DEFAULT_BACKEND": "skia"
+            }
+        },
+        {
             "name": "macos-x64",
             "hidden": true,
             "displayName": "macOS (Ninja, Intel)",
@@ -129,6 +139,10 @@
             "configurePreset": "macos-arm64-release"
         },
         {
+            "name": "macos-arm64-skia",
+            "configurePreset": "macos-arm64-skia"
+        },
+        {
             "name": "macos-x64-debug",
             "configurePreset": "macos-x64-debug"
         }
@@ -161,6 +175,13 @@
         {
             "name": "macos-arm64-debug",
             "configurePreset": "macos-arm64-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-arm64-skia",
+            "configurePreset": "macos-arm64-skia",
             "output": {
                 "outputOnFailure": true
             }

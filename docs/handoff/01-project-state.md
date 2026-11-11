@@ -1,8 +1,8 @@
 # 01 · 项目现状（Project State）
 
-> 快照时间：Windows 交互落地（`42518f8`）与渲染层重构之后；2026-11-10 又补了 Skia 第三后端。
-> 分支 `practice` @ **`5ebdfa7`**。**最新进度与下一步**以
-> [`README.md`](README.md) 和 [`09-skia-backend.md`](09-skia-backend.md) 为准；
+> 快照时间：2026-11-11 Skia 重构（SkiaGpuBackend + MetalRenderer 拆分 + CMake 分层）。
+> 分支 `practice`。**最新进度与下一步**以
+> [`README.md`](README.md) 和 [`10-skia-refactor-cmake.md`](10-skia-refactor-cmake.md) 为准；
 > [`08-current-progress.md`](08-current-progress.md) 保留为 MetalContext 重构的历史记录。
 
 ## 1. Git
@@ -10,7 +10,7 @@
 | 项 | 值 |
 |---|---|
 | 工作分支 | `practice` |
-| HEAD | `5ebdfa7 chore: add clang-format config, legacy snapshots and notes`（含 Skia 后端 `ff89ba9`） |
+| HEAD | 本次 Skia 重构提交（以 `git log -1` 为准） |
 | 远端 | `git@github-shirley:XiaoliZhouCN/chroma-cms.git`（SSH 别名 `github-shirley`） |
 | 参考实现分支 | `develop` @ `86f1ea2`（**与 practice 无共同祖先**，只能按文件借用） |
 | 参考实现 tag | `ref-impl-m1`（本地存在；若 mac 上没有，用 `git show develop:<path>`） |
@@ -21,13 +21,14 @@
 ## 2. 代码地图（practice 分支）
 
 ```
-CMakeLists.txt                 顶层：C++20、Qt6(Core/Gui/Widgets)、include 两个 cmake 模块
+CMakeLists.txt                 顶层：C++20、Qt6、测试入口
 CMakePresets.json              windows-x64-* / macos-arm64-* / macos-x64-*
 cmake/
-  QtBootstrap.cmake            实为 chroma_set_warnings()：MSVC /W4 /utf-8，GCC/Clang -Wall
-  CompilerWarnings.cmake       （历史遗留拆分，内部实为 Qt 定位）
+  QtBootstrap.cmake            Qt 定位 + chroma_set_warnings()
   FindFFmpeg.cmake             定位 external/ffmpeg，产出 FFmpeg::FFmpeg
-  FindSkia.cmake               定位预编译 Skia（Windows/D3D12），产出 Skia::Skia（已接线，Windows）
+  FindSkia.cmake               定位预编译 Skia；Windows/D3D12 + macOS/Metal
+src/gfx/CMakeLists.txt         创建 chroma_gfx；gfx/d3d12、gfx/metal 追加 sources
+src/render/CMakeLists.txt      创建 chroma_render；render/d3d12、metal、skia 追加/创建 target
 docs/third-party/skia.md       Skia M155 预编译包清单与消费约束
 shaders/
   fullscreen.hlsl              Windows：VS(全屏三角形) + PS(PQ → 709 → scRGB) + 矩阵 UV
@@ -41,11 +42,17 @@ src/
   render/IViewTransform.hpp    可选交互接口：setQuarterTurns / setZoom
   render/RendererFactory.{hpp,cpp} 按平台创建 D3D12 / Metal
   render/d3d12/D3D12Renderer.{hpp,cpp}  D3D12 后端（只画：根签名/PSO/纹理/常量/Draw）
-  render/metal/MetalRenderer.{hpp,mm}   Metal 后端（设备/图层仍在自己身上，待拆 MetalContext）
+  render/metal/MetalRenderer.{hpp,cpp,mm} + MetalRendererImpl.hpp  Metal 手写后端（接口 .cpp + ObjC .mm）
+  render/skia/SkiaRenderer.{hpp,cpp}    Skia 平台无关绘制（SkSL/交互/图像）
+  render/skia/SkiaGpuBackend.hpp       平台后端接口
+  render/skia/SkiaGpuBackendD3D12.cpp  Windows D3D12 后端
+  render/skia/SkiaGpuBackendMetal.mm   macOS Metal 后端
   app/main.cpp                 加载图片 → MainWindow
   app/MainWindow.{hpp,cpp}     窗口 + 状态栏
   app/ViewportWidget.{hpp,cpp} 原生表面宿主 + A/D/Q/E/R 交互
-tests/unit/smoke_test.cpp      冒烟测试（ctest 1 项）
+src/gfx/ColorMath.hpp          CPU 色彩参考（M5）
+tests/unit/smoke_test.cpp      冒烟测试
+tests/unit/color_math_test.cpp ColorMath 单元测试（ctest 共 2 项）
 tools/
   gen_ptmr.py                  PTMR 测试图生成器（当前在仓库里）
   fetch-ffmpeg.ps1             Windows FFmpeg 下载脚本
@@ -159,8 +166,10 @@ python tools/gen_ptmr.py --out assets/test-images/PTMR_9-16-9-full_2048x2048_10b
 | 项 | 说明 |
 |---|---|
 | Windows 交互 | ✅ 已完成（`42518f8`）；重构后行为不变，见 `08` §2 |
-| macOS MetalContext | ⬜ `MetalRenderer` 还没拆出 `gfx/metal/MetalContext` → 见 `08` §6（下一步） |
-| Skia 第三后端 | ⬜ `FindSkia.cmake` / `docs/third-party/skia.md` 已就绪，但**未接进构建图**、无 `SkiaRenderer`；见 `08` §5 |
+| macOS MetalContext | ✅ 已完成（`822b976`），`MetalRenderer` 已接 `gfx/metal/MetalContext` |
+| Skia 第三后端 | ✅ mac Metal 基础适配完成；Windows `SkiaGpuBackendD3D12.cpp` 待实机编译/运行 |
+| M5 一致性 | CPU ColorMath 基础测试已过；CSV nits 断言待补 |
+| CMake 分层 | ✅ 每个构建目录一个 CMakeLists；规范见 `10` §3 |
 | macOS EDR | `CAEDRMetadata` / tone mapping 未做；`outputScale=1.0` 高光逐通道裁剪 |
 | 色调映射 | 两平台都还没有自己的 BT.2390 |
 | 一致性测试 | 没有 CPU 参考实现与单元测试；目前靠离屏回读/截图人工对照 |

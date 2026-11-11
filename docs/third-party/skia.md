@@ -107,3 +107,121 @@ sk_sp<GrDirectContext> ctx = GrDirectContexts::MakeD3D(backend);
   `skia_use_metal=true` 的产物，并在 `FindSkia.cmake` 加 APPLE 分支
   （参数与步骤见 `09` §4.2）。
 - 由于 `/MD` 限制，Skia 后端只能在 **Release** 预设下构建；Debug 构建不接入 Skia。
+
+## 8. macOS Metal 包（2026-11-11 已构建）
+
+macOS 侧使用单独目录 **`external/skia-mac/`**，不覆盖 Windows 的 `external/skia/`。
+
+### 8.1 来源与版本
+
+| 项 | 值 |
+|---|---|
+| 源码 | `https://gitee.com/mirrors/skia.git`，分支 `chrome/m155` |
+| commit | `a4213f447f333e76023148f45338a8b05e4060a5` |
+| 里程碑 | M155（`SK_MILESTONE 155`） |
+| GN | 从 `https://github.com/cglogic/gn` 源码构建（本机 appspot 不可达） |
+| 构建目录 | `~/skia-build/skia/out/mac-metal`（不入库） |
+| 包目录 | `external/skia-mac/`（gitignore） |
+
+### 8.2 GN 参数（`external/skia-mac/args.gn`）
+
+```gn
+is_debug = false
+target_os = "mac"
+target_cpu = "arm64"
+skia_use_metal = true
+skia_use_gl = false
+skia_use_vulkan = false
+skia_use_dawn = false
+skia_enable_graphite = false
+
+# 本项目只用 Skia 的 GPU 绘制 + SkSL；图像解码仍由 FFmpeg 负责，
+# 所以把可选 codec / 字体 / SVG / 压缩依赖全部关掉，避免拉第三方源码。
+skia_use_partition_alloc = false
+skia_use_harfbuzz = false
+skia_use_expat = false
+skia_use_jpeg_gainmaps = false
+skia_enable_svg = false
+skia_use_libpng_decode = false
+skia_use_libpng_encode = false
+skia_use_libjpeg_turbo_decode = false
+skia_use_libjpeg_turbo_encode = false
+skia_use_libwebp_decode = false
+skia_use_libwebp_encode = false
+skia_use_libavif = false
+skia_use_libjxl_decode = false
+skia_use_icu = false
+skia_use_icu4x = false
+skia_use_libgrapheme = false
+skia_use_freetype = false
+skia_use_fontconfig = false
+skia_use_zlib = false
+skia_use_wuffs = false
+skia_use_dng_sdk = false
+skia_use_piex = false
+skia_use_perfetto = false
+skia_enable_tools = false
+
+cc = "clang"
+cxx = "clang++"
+extra_cflags = [ "-mmacosx-version-min=13.0" ]
+extra_ldflags = [ "-mmacosx-version-min=13.0" ]
+```
+
+### 8.3 产物
+
+```text
+external/skia-mac/
+  include/                 # 公共头（含 include/gpu/ganesh/mtl/）
+  modules/skcms/           # skcms.h
+  lib/
+    libskia.a              # 317 MB
+    libskcms.a             # 396 KB
+  args.gn
+  LICENSE
+  MANIFEST.md
+```
+
+> 因为关掉了 codec/字体/SVG，mac 包只有 `libskia.a` + `libskcms.a`；
+> 与 Windows 包的 `skia.lib + harfbuzz + libpng...` 布局不同。
+> `SkiaRenderer` 的图像输入仍来自 FFmpeg 的 RGBA16，不需要 Skia codec。
+
+### 8.4 最小探针（已通过）
+
+`temp_and_scratch/skia-mac-probe.log`：
+
+```text
+ok milestone=155
+```
+
+探针覆盖：
+
+```text
+MTLCreateSystemDefaultDevice
+  → GrDirectContexts::MakeMetal
+  → MTLTexture(RGBA16Float, RenderTarget)
+  → GrBackendRenderTargets::MakeMtl
+  → SkSurfaces::WrapBackendRenderTarget
+  → canvas->clear
+  → gr->flushAndSubmit()
+```
+
+### 8.5 CMake 消费
+
+`cmake/FindSkia.cmake` 已加 APPLE 分支：
+
+- 默认搜索 `external/skia-mac`（可用 `-DSKIA_ROOT=` 覆盖）；
+- 定义 `SK_GANESH;SK_METAL`；
+- 链接 `libskia.a`、`libskcms.a` 和系统框架：
+  `Foundation AppKit Metal MetalKit QuartzCore CoreGraphics CoreText IOSurface CoreVideo CoreFoundation`；
+- OBJCXX 自动加 `-fobjc-arc`。
+
+CMake 探针构建/运行：
+
+```text
+-- ChromaCMS: Skia (Metal) = .../external/skia-mac (M155, 仅 Release 配置可用)
+ok milestone=155
+```
+
+> `src/render/CMakeLists.txt` 的 Skia target 仍只在 `WIN32` 下启用；
+> mac 的 `SkiaGpuBackend` / `SkiaGpuBackendMetal.mm` 落地后打开 APPLE 分支。

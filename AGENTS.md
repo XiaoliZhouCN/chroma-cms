@@ -39,14 +39,16 @@ ChromaCMS 是一个**手写渲染器**练习项目：用 Qt 做窗口，用自�
 | 6 | `docs/handoff/05-macos-setup.md` | macOS 环境搭建与排错 |
 | 7 | `docs/handoff/06-bootstrap-prompt.md` | 给新 agent 的启动提示词（历史；新的 mac 启动词在 `08` §11） |
 | 8 | `docs/handoff/07-windows-interaction.md` | Windows 交互适配（✅ 已完成，保留作原理参考） |
-| 9 | `docs/handoff/08-current-progress.md` | **当前进度**：Windows 交互 + 渲染层重构 + **macOS 的 MetalContext 拆分方案** |
+| 9 | `docs/handoff/08-current-progress.md` | 历史进度：Windows 交互 + 渲染层重构 + MetalContext 拆分 |
+| 10 | `docs/handoff/09-skia-backend.md` | Skia 第三后端的实现与 mac 验证 |
+| 11 | `docs/handoff/10-skia-refactor-cmake.md` | **当前重点**：SkiaGpuBackend 重构 + CMakeLists 分层规范 + Windows 继续开发 |
 
 ## 3. 平台现状
 
 | 平台 | 后端 | 进度 |
 |---|---|---|
 | Windows | 自写 D3D12 | 设备/交换链 → 三角形 → 纹理 → FFmpeg 解码 → PQ 色彩管线（单 pass，scRGB 16F）✅；交互（A/D/Q/E/R）✅（`42518f8`）；渲染层重构：`gfx/d3d12/D3D12Context` + `render/d3d12/D3D12Renderer` ✅ |
-| macOS | 自写 Metal | M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互 ✅；**M4.6 MetalContext 拆分待做**（见 `08` §6）；M5 一致性待做 |
+| macOS | 自写 Metal | M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互 ✅；MetalContext + MetalRenderer .cpp/.mm 拆分 ✅；Skia（Ganesh Metal）基础适配 ✅；M5 部分完成 |
 
 > 目录约定（重构后）：`src/gfx/<api>/` 放原生上下文（设备/交换链/同步），
 > `src/render/<api>/` 放后端绘制；两者各自按平台条件编译。
@@ -104,3 +106,17 @@ open build/macos-arm64-debug/ChromaCMS.app    # 或直接跑 .app/Contents/MacOS
 - [ ] 没有修改用户的源码文件（`git status` 干净或只剩用户自己的改动）
 - [ ] 改动清单里每处都有"在哪一行之后插入"的锚点
 - [ ] 常见错误表写清楚（用户跑失败时能自查）
+
+## 7. CMakeLists 分层规范（2026-11-11）
+
+完整说明见 `docs/handoff/10-skia-refactor-cmake.md` §3。要点：
+
+1. `src` / `tests` 下每个构建目录都有 `CMakeLists.txt`。
+2. 父目录创建 target 和公共属性，子目录只 `target_sources()` / 追加 links、options。
+3. 平台目录只在对应平台 `add_subdirectory()`：
+   `gfx/d3d12`、`gfx/metal`、`render/d3d12`、`render/metal`。
+4. `render/skia` 是可选独立 target `chroma_render_skia`；
+   父目录只在 `if(TARGET chroma_render_skia)` 时链接并定义 `CHROMA_HAS_SKIA`。
+5. `cmake/` 只放可复用模块：`QtBootstrap.cmake`、`FindFFmpeg.cmake`、`FindSkia.cmake`。
+6. INTERFACE target 只能用 INTERFACE 属性；`chroma_set_warnings()` 只对真实 target 调用。
+7. 叶子目录不要重复 `add_library()`，也不要在父目录直接列叶子源文件。

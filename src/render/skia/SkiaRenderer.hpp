@@ -8,9 +8,9 @@
 
 namespace chroma::render
 {
-/// 第三后端：Skia（Ganesh）桥接。
-/// 目标是"两个平台共用同一套绘制逻辑"：本类只写 SkCanvas / SkSL / 图像，
-/// 原生上下文（device/queue/交换链）由 gfx:: 层提供。
+/// 第三后端：Skia（Ganesh）。
+/// 本类负责平台无关的 SkSL / SkCanvas / 图像 / 交互；
+/// 原生 context、Ganesh、离屏目标与 present 由 SkiaGpuBackend 负责。
 class SkiaRenderer final : public IRenderer, public IViewTransform
 {
 public:

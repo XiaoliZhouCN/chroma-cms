@@ -7,6 +7,9 @@
 > 本文件 §1 / §2 / §3 的路径与代码片段是重构前的**设计记录**；当前实现与 CMake 以仓库现状为准，
 > 进度与 mac 任务见 [`08-current-progress.md`](08-current-progress.md)。
 >
+> **当前 CMake 分层**：每个构建目录一个 `CMakeLists.txt`，父目录建 target、子目录追加 sources；
+> 完整规范见 [`10-skia-refactor-cmake.md`](10-skia-refactor-cmake.md) §3。
+>
 > **当前色域是刻意分离的**：Windows 输出 BT.709/scRGB（`outputScale=0.8`），
 > macOS 输出 Display-P3 线性（`outputScale=1.0`）。共享 PQ 与 BT.2020→XYZ，
 > 最后一步矩阵按平台不同；不要追求逐像素一致。
