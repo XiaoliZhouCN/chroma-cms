@@ -46,6 +46,8 @@ ChromaCMS 是一个**色彩管理学习 + 工程实践**仓库，双主线：
 | 3 | [`docs/color/00-index.md`](docs/color/00-index.md) | 理论学习手册（L0–L5、文章索引、实验与断言映射） |
 | 4 | [`docs/testing/00-index.md`](docs/testing/00-index.md) | 测试手册（unit/integration/e2e、阈值、资产策略） |
 | 5 | [`docs/handoff/`](docs/handoff/) | 工程交接与历史方案（**历史记录，不再是方向来源**） |
+| 6 | [`docs/decisions/`](docs/decisions/) | 决策记录（ADR-lite；规则/架构变化必须登记） |
+| 7 | 目标目录下的 `AGENTS.md` + `README.md` | 该目录的本地规则与开发说明（按需读取） |
 
 历史背景：`docs/handoff/01`–`10` 记录了 Windows/macOS 两端的早期开发与重构过程，可作为代码地图与踩坑参考。
 
@@ -130,7 +132,7 @@ cmake --build --preset macos-arm64-skia
 ## 6. 交付自检清单
 
 - [ ] 构建绿（会受影响的平台都要构建）
-- [ ] `ctest` 通过（新增功能必须带测试）
+- [ ] `ctest` 通过（新增功能必须带测试；含 `docs.structure` 目录文档门禁）
 - [ ] 运行过，并给出双视图截图或关键日志
 - [ ] 改动报告：锚点 + 改了什么 + 为什么 + 验证结果
 - [ ] 没有改与任务无关的代码/格式化
@@ -143,7 +145,7 @@ cmake --build --preset macos-arm64-skia
 
 完整说明见 `docs/handoff/10-skia-refactor-cmake.md` §3。要点：
 
-1. `src` / `tests` 下每个构建目录都有 `CMakeLists.txt`。
+1. `src` / `tests` / `tools` 下每个构建目录都有 `CMakeLists.txt` 与三件套文档（§12）。
 2. 父目录创建 target 和公共属性，子目录只 `target_sources()` / 追加 links、options。
 3. 平台目录只在对应平台 `add_subdirectory()`：
    `gfx/d3d12`、`gfx/metal`、`render/d3d12`、`render/metal`。
@@ -193,3 +195,61 @@ cmake --build --preset macos-arm64-skia
 - `docs/handoff/01`–`10`：历史记录（早期协作模式：用户写实现、agent 给逐处改法）。
   其中**技术原理**仍有效，**协作规则**已被本文件取代。
 - `docs/ROADMAP.md`：方向与阶段唯一来源，优先于所有历史文档。
+
+---
+
+## 12. 目录规范（2026-11-13）
+
+### 12.1 三件套范围
+
+| 目录类型 | AGENTS.md | README.md | CMakeLists.txt |
+|---|---|---|---|
+| 构建目录：`src/`、`tests/`、`tools/` 下每个含 `CMakeLists.txt` 的目录 | 必须 | 必须 | 必须（已有） |
+| `docs/` 及子目录 | 可选（仅当有本地规则） | 必须 | 不加（不参与构建） |
+| 根目录 | 必须 | 必须 | 必须（已有） |
+
+### 12.2 分层继承与冲突
+
+1. **就近优先**：同一事项，子目录 `AGENTS.md` > 父目录 > 根。
+2. **硬规则不可覆写**：§1（分工、验证、commit/push/远程、`.hpp`、依赖审批）任何子目录不得放松。
+3. **只能更严格**：子目录可以增加约束，不能减少验证或放宽阈值。
+4. **冲突即停**：无法用"更严格"解释的冲突，agent 必须停下来问，不得自行裁决。
+5. **占位合法**：无本地扩展时必须写"无本地扩展"，禁止空文件。
+
+### 12.3 AGENTS.md front-matter（机器可校验）
+
+```yaml
+---
+extends: ../AGENTS.md        # 相对本文件的父级 AGENTS 路径，必须存在
+scope: src/color             # 相对仓库根的目录路径，必须与本目录一致
+owner: agent                 # 维护者
+last_verified: 2026-11-13    # 最近一次人工/AI 复核日期
+---
+```
+
+正文必须包含 `## 继承`，并包含 `## 本地约定`（有扩展）或"无本地扩展"字样（占位）。
+
+### 12.4 README.md
+
+必须包含：本目录是什么、文件与职责、依赖关系（允许/禁止/被依赖）、构建与测试（target/ctest）、
+怎么加新东西、相关文档。
+
+### 12.5 校验
+
+`tools/doc-check` 以 ctest `docs.structure` 运行，检查：
+
+- 必需文件存在；
+- front-matter 完整、`extends` 与 `scope` 正确；
+- 占位/本地约定声明；
+- `docs/` 规定目录的 README；
+- 所有被检查 Markdown 的相对链接存在。
+
+失败即阻断提交。模板见 `docs/templates/`，决策记录见 `docs/decisions/0001-directory-docs-convention.md`。
+
+## 13. 决策记录（2026-11-13）
+
+- 影响长期协作/架构/规范的决定写入 `docs/decisions/NNNN-<kebab-title>.md`；
+- 固定结构：背景 → 决定 → 后果 → 规则；
+- 生效后根 `AGENTS.md` / `ROADMAP.md` 必须引用编号；
+- 被推翻的决策保留，并标注"已废止（被 NNNN 取代）"；
+- 口头约定不算决策，必须落盘。

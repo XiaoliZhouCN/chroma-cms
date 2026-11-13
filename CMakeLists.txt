@@ -40,6 +40,7 @@ message(STATUS "ChromaCMS: Qt ${Qt6_VERSION} @ ${QT_ROOT}")
 # ---- 目标 ----
 include(CTest)
 add_subdirectory(src)
+add_subdirectory(tools)
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

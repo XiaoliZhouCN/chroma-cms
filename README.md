@@ -50,6 +50,7 @@ docs/          ROADMAP + color（学习手册）+ testing（测试手册）+ han
 - [`docs/color/00-index.md`](docs/color/00-index.md)：色彩管理学习手册
 - [`docs/testing/00-index.md`](docs/testing/00-index.md)：测试手册
 - [`docs/handoff/README.md`](docs/handoff/README.md)：历史交接记录
+- [`docs/decisions/README.md`](docs/decisions/README.md)：决策记录（ADR-lite）
 
 ## 构建
 
@@ -87,4 +88,6 @@ cmake --build --preset macos-arm64-skia
 - agent **本地 commit**；**push 由用户执行**；未经明确授权禁止任何远程写操作。
 - 每阶段必须 **Windows + macOS 双端验收通过**才能进入下一阶段。
 - 新增第三方依赖先问（已批准：FFmpeg、预编译 Skia、lcms2 仅用于 ICC 解析/交叉校验）。
+- 目录文档规范：每个构建目录三件套（`AGENTS.md` + `README.md` + `CMakeLists.txt`），
+  继承与校验规则见 [`AGENTS.md`](AGENTS.md) §12；`ctest -R docs.structure` 门禁。
 - 不要 merge `develop`（与 `practice` 无共同祖先）。
