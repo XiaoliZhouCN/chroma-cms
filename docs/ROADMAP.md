@@ -188,6 +188,10 @@ struct Frame {
 
 **验收**：双平台构建绿；ctest 通过；双视图能显示左右两份结果。
 
+**P0 状态（2026-11-13）：完成。** 已交付：`src/color` CPU oracle、`src/io` 容器探测、
+`tools/chroma-probe`、`tests/corpus` + 生成/下载脚本、`docs/color/01` 首篇 + `unit.container_probe`、
+双视图骨架（左/右/并排 Tab）。**叠图**需要离屏合成/差值渲染，放到 P1。
+
 ### P1 · 静态图三轨并行：SDR / HDR / 双层（约 2–3 周）
 
 三条 track 并行推进，每个 track 独立交付文档+代码+测试：

@@ -23,7 +23,7 @@
 
 | 层 | 编号 | 标题 | 状态 | 对应实验 | 对应测试 |
 |---|---|---|---|---|---|
-| L0 | 01 | 容器与帧基础：文件类型、单层/双层/多页/动图/视频帧 | 计划 | `chroma-probe <file>` | `container_probe_test` |
+| L0 | 01 | [容器与帧基础：文件类型、单层/双层/多页/动图/视频帧](01-container-and-frame-basics.md) | **已发布** | `chroma-probe <file>` | `unit.container_probe` |
 | L0 | 02 | PNG / JPEG / TIFF 的容器结构与色彩元数据 | 计划 | `chroma-probe` + 样例文件 | `png_metadata_test`、`jpeg_metadata_test`、`tiff_metadata_test` |
 | L0 | 03 | HEIF / AVIF / EXR 与 HDR 静态元数据（MDCV/CLLI、chromaticities） | 计划 | `chroma-probe` | `heif_avif_metadata_test`、`exr_metadata_test` |
 | L1 | 04 | 解码后的像素格式：位深、chroma 子采样、range、matrix | 计划 | `chroma-probe --frame` | `pixel_format_test` |

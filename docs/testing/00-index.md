@@ -111,7 +111,7 @@ for (const auto &c : cases) { ... }
 
 | 阶段 | 必须新增 |
 |---|---|
-| P0 | 现有 color math 迁入 `src/color` 后的 unit 测试；probe 输出测试 |
+| P0 | 现有 color math 迁入 `src/color` 后的 unit 测试；容器探测测试（`unit.container_probe`） |
 | P1 | 每种格式的元数据解析 unit；SDR/HDR/双层各自的 integration；双视图 e2e |
 | P2 | 视频首帧/连续帧 integration；四轨统一 ΔE 报告 |
 | P3 | 系统显示链路实验记录（非断言类）；环境参数化测试 |
