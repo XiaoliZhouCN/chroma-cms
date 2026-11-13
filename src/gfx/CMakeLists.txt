@@ -1,17 +1,17 @@
-# 平台层：原生图形上下文（设备 / 队列 / 交换链 / 同步）+ 共享工具。
+# 平台层：原生图形上下文（设备 / 队列 / 交换链 / 同步）。
 #
 #   d3d12/    Windows：D3D12Context
 #   metal/    macOS：MetalContext
 #
-# 抽象契约在 render/；这里只放具体平台的原生资源和帧生命周期。
+# 抽象契约在 render/；色彩数学在 src/color/（本层不承载色彩计算）。
 
 if(WIN32)
     add_library(chroma_gfx STATIC
-        ColorMath.hpp
+        GfxCommon.hpp
         D3D12Common.hpp)
 elseif(APPLE)
     add_library(chroma_gfx STATIC
-        ColorMath.hpp)
+        GfxCommon.hpp)
 else()
     add_library(chroma_gfx INTERFACE)
 endif()

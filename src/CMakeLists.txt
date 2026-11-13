@@ -1,4 +1,5 @@
 add_subdirectory(core)
+add_subdirectory(color)
 add_subdirectory(gfx)
 add_subdirectory(media)
 add_subdirectory(render)
