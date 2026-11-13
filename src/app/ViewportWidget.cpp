@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <exception>
+#include <stdexcept>
 #include <algorithm>
 
 namespace chroma::app {
@@ -28,12 +29,19 @@ constexpr float kMaxZoom = 8.0f;
 } // namespace
 
 ViewportWidget::ViewportWidget(QWidget* parent)
-    : ViewportWidget(nullptr, parent)      // 委托给下面那个
+    : ViewportWidget(render::BackendKind::Native, nullptr, parent)
 {
 }
 
 ViewportWidget::ViewportWidget(std::shared_ptr<const media::Image> image, QWidget* parent)
+    : ViewportWidget(render::BackendKind::Native, std::move(image), parent)
+{
+}
+
+ViewportWidget::ViewportWidget(render::BackendKind kind,
+                               std::shared_ptr<const media::Image> image, QWidget* parent)
     : QWidget(parent)
+    , m_backendKind(kind)
     , m_image(std::move(image))
 {
     setAttribute(Qt::WA_NativeWindow);
@@ -63,7 +71,10 @@ void ViewportWidget::ensureRenderer()
     m_initAttempted = true;
 
     try {
-        auto renderer = render::createRenderer();
+        auto renderer = render::createRenderer(m_backendKind);
+        if (!renderer) {
+            throw std::runtime_error("Skia 后端未编译（需要 skia Release 预设）");
+        }
 
         // QWidget::winId() 在 Windows 上是 HWND，在 macOS 上是 NSView*
         // Q: 为什么要 先创建renderer 再 move 到 m_renderer？

@@ -7,8 +7,8 @@ Qt 应用层：窗口、viewport、输入事件、把渲染器/解码器串成�
 | 文件 | 职责 |
 |---|---|
 | `main.cpp` | 程序入口，创建 `MainWindow` |
-| `MainWindow.*` | 主窗口与状态栏（显示图像/后端信息） |
-| `ViewportWidget.*` | 原生表面、渲染器生命周期、交互按键（A/D/Q/E/R） |
+| `MainWindow.*` | 双视图主窗口：左（手写原生）/右（Skia）/并排 Tab + 状态栏 |
+| `ViewportWidget.*` | 原生表面、指定后端（Native/Skia）、交互按键（A/D/Q/E/R） |
 
 ## 依赖关系
 - 允许：Qt6、`render`（IRenderer/工厂）、`media`、`color`。
@@ -17,7 +17,13 @@ Qt 应用层：窗口、viewport、输入事件、把渲染器/解码器串成�
 
 ## 构建与测试
 - target：`ChromaCMS`
-- 测试：当前以运行 + 截图为主；后续双视图会引入 e2e 截图对比。
+- 双视图：左 = 手写原生后端，右 = Skia；默认并排，Tab 可切 左/右/并排（叠图 P1）。
+- 测试：当前以运行 + 截图为主；后续引入 e2e 截图对比。
+
+```powershell
+cmake --build --preset windows-x64-skia
+.\build\windows-x64-skia\Release\ChromaCMS.exe   # 双视图需要 skia 预设
+```
 
 ## 怎么加 UI 功能
 1. 先在 `MainWindow`/`ViewportWidget` 里确定归属；

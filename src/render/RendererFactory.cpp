@@ -37,6 +37,25 @@ std::string readEnv(const char *name)
 
 namespace chroma::render {
 
+std::unique_ptr<IRenderer> createRenderer(BackendKind kind)
+{
+    if (kind == BackendKind::Skia) {
+#if defined(CHROMA_HAS_SKIA)
+        return std::make_unique<SkiaRenderer>();
+#else
+        return nullptr;
+#endif
+    }
+
+#if defined(_WIN32)
+    return std::make_unique<D3D12Renderer>();
+#elif defined(__APPLE__)
+    return std::make_unique<MetalRenderer>();
+#else
+    return nullptr;
+#endif
+}
+
 std::unique_ptr<IRenderer> createRenderer()
 {
     std::string requested = readEnv("CHROMA_BACKEND");
@@ -46,17 +65,10 @@ std::unique_ptr<IRenderer> createRenderer()
     }
 #endif
 
-#if defined(CHROMA_HAS_SKIA)
     if (requested == "skia") {
-        return std::make_unique<SkiaRenderer>();
+        return createRenderer(BackendKind::Skia);
     }
-#endif
-
-#if defined(_WIN32)
-    return std::make_unique<D3D12Renderer>();
-#elif defined(__APPLE__)
-    return std::make_unique<MetalRenderer>();
-#endif
+    return createRenderer(BackendKind::Native);
 }
 
 } // namespace chroma::render

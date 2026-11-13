@@ -3,6 +3,8 @@
 #include <QString>
 #include <QWidget>
 
+#include "render/RendererFactory.hpp"
+
 #include <cstdint>
 #include <memory>
 
@@ -19,10 +21,10 @@ class IRenderer;
 
 namespace chroma::app {
 
-/// 原生表面宿主：提供一个稳定的 HWND 与正确的物理像素尺寸。
+/// 原生表面宿主：提供一个稳定的 native window 与正确的物理像素尺寸。
 ///
 /// 三个属性是必需的：
-///   WA_NativeWindow       保证有独立 HWND
+///   WA_NativeWindow       保证有独立 native window
 ///   WA_OpaquePaintEvent   禁止 Qt 擦背景
 ///   WA_NoSystemBackground 同上，避免和交换链抢后台缓冲
 class ViewportWidget final : public QWidget {
@@ -30,9 +32,11 @@ class ViewportWidget final : public QWidget {
 
 public:
     explicit ViewportWidget(QWidget* parent = nullptr);
-    ~ViewportWidget() override;
     explicit ViewportWidget(std::shared_ptr<const media::Image> image,
                             QWidget* parent = nullptr);
+    ViewportWidget(render::BackendKind kind, std::shared_ptr<const media::Image> image,
+                   QWidget* parent = nullptr);
+    ~ViewportWidget() override;
 
 signals:
     void rendererReady(const QString& backend);
@@ -50,6 +54,7 @@ private:
     std::uint32_t physicalWidth() const;
     std::uint32_t physicalHeight() const;
 
+    render::BackendKind m_backendKind = render::BackendKind::Native;
     std::unique_ptr<render::IRenderer> m_renderer;
     bool m_initAttempted = false;
 

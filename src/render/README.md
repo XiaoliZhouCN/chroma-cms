@@ -8,7 +8,7 @@
 |---|---|
 | `IRenderer.hpp` | 渲染器契约：initialize/resize/present/backendName/setImage |
 | `IViewTransform.hpp` | 可选交互契约：setQuarterTurns/setZoom |
-| `RendererFactory.*` | 按平台/环境变量选择后端 |
+| `RendererFactory.*` | 按平台/环境变量选择后端；`createRenderer(BackendKind)` 供双视图显式指定 |
 | `d3d12/` | 手写 D3D12 后端 |
 | `metal/` | 手写 Metal 后端 |
 | `skia/` | Skia（Ganesh）桥接后端（D3D12/Metal） |
