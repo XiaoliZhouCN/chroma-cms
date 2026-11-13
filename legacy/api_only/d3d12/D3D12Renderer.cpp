@@ -309,11 +309,14 @@ void D3D12Renderer::createRenderTargets()
 }
 
 /* ==================== 根签名 / PSO ==================== */
-// Q. 为什么需要根签名？
-// A. 
+// 创建根签名
+// 根签名保存了"shader 的 t/s/b 槽位怎么对应根参数、静态采样器长什么样、哪些阶段可见
 void D3D12Renderer::createRootSignature()
 {
     // 第 4 步：一个 SRV 描述符表（t0）+ 一个静态采样器（s0）
+    // t0 = 第 0 号纹理/着色器资源寄存器
+    // s0 = 第 0 号采样器寄存器
+
     // srvRange: 描述符表的范围，包含一个 SRV 描述符，绑定到寄存器 t0
     // 1张表里连续N个描述符对应着色器的哪些槽位
     // 1个range里可以有多张表
@@ -324,7 +327,7 @@ void D3D12Renderer::createRootSignature()
     srvRange.RegisterSpace = 0;
     srvRange.OffsetInDescriptorsFromTableStart = 0;
 
-    // 根参数：一个描述符表，包含上面定义的 srvRange，绑定到寄存器 t0
+    // 根参数 0：一个描述符表，包含上面定义的 srvRange，绑定到寄存器 t0
     D3D12_ROOT_PARAMETER param{};
     param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     param.DescriptorTable.NumDescriptorRanges = 1;
@@ -342,12 +345,14 @@ void D3D12Renderer::createRootSignature()
     sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;       // shadow map 才用，这里不需要
-    sampler.MaxLOD = D3D12_FLOAT32_MAX; // mip级别，默认0，这里设max
+    sampler.MaxLOD = D3D12_FLOAT32_MAX;                     // mip级别，默认0，这里设max
     sampler.ShaderRegister = 0;
     sampler.RegisterSpace = 0;
     sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     // 根参数 1：8 个 32 位常量，映射到 b0
+    // 0是param（一个描述符）
+    // 1是8个常量，根据需要设置，
     D3D12_ROOT_PARAMETER params[2] = {};
     params[0] = param;                                    // 原 SRV 表
     params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
@@ -389,7 +394,8 @@ void D3D12Renderer::createPipelineState()
     gfx::ComPtr<ID3DBlob> ps = compileShader(path, "PSMain", "ps_5_1");
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
-    desc.pRootSignature = m_rootSignature.Get();
+    desc.pRootSignature = m_rootSignature.Get();                // PSO 绑定 根签名，根签名保存了"shader 的 t/s/b 槽位怎么对应根参数、静态采样器长什么样、哪些阶段可见
+                                                                // 录制命令的时候还会再绑一次，这里的“绑定”没有实质绑定，只是创建PSO时按照根签名布局编译/校验
     desc.VS = {vs->GetBufferPointer(), vs->GetBufferSize()};
     desc.PS = {ps->GetBufferPointer(), ps->GetBufferSize()};
 
@@ -448,8 +454,6 @@ void D3D12Renderer::createSrvHeap()
 }
 
 // 创建一个测试纹理，并上传到 GPU
-// Q: 真实环境中上传纹理是否单独为一个函数？
-// A: 是的，在真实环境中，上传纹理通常会单独封装为一个函数或类方法，以便在需要时可以方便地调用。这样可以提高代码的可维护性和可重用性，同时也有助于管理纹理资源的生命周期和上传过程中的错误处理。
 void D3D12Renderer::createTextureFromImage(std::uint32_t width, std::uint32_t height,
                                            const std::uint16_t* rgba16)
 {
