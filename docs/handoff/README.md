@@ -1,9 +1,12 @@
 # ChromaCMS · 交接文档（handoff）
 
-> 这套文档的用途：**让 Windows / macOS 两侧的 AI 协作 agent 能互相接续进度**。
-> 当前基线：`practice` 本次 Skia 重构提交。Windows 侧已完成交互、上下文层重构、
-> Skia（Ganesh D3D12）第三后端；macOS 侧已完成 Metal 拆分 + Skia（Ganesh Metal）。
-> 下一步：**Windows 拉取后构建 `windows-x64-skia`，验证 `SkiaGpuBackendD3D12.cpp`**。
+> 这套文档的用途：**早期 Windows / macOS 开发与重构的交接记录**。
+>
+> **2026-11-13 方向重置**：仓库新定位是"色彩管理学习 + 工程实践"（完整链路、多格式、
+> CPU oracle、三级测试、双视图对照）。**方向与阶段以 [`../ROADMAP.md`](../ROADMAP.md) 为准**；
+> 学习手册见 [`../color/00-index.md`](../color/00-index.md)，测试手册见
+> [`../testing/00-index.md`](../testing/00-index.md)，协作规则见 [`../../AGENTS.md`](../../AGENTS.md)。
+> 本目录的 `01`–`10` 保留为历史记录与技术参考，**不再是方向来源**。
 
 ## 阅读顺序
 
@@ -18,7 +21,7 @@
 | 7 | [`07-windows-interaction.md`](07-windows-interaction.md) | Windows 交互适配（✅ 已完成，保留作原理参考） |
 | 8 | [`08-current-progress.md`](08-current-progress.md) | 历史进度：Windows 交互 + 渲染层重构 + MetalContext 拆分方案（已完成，见 `822b976`） |
 | 9 | [`09-skia-backend.md`](09-skia-backend.md) | Skia 第三后端的实现与 mac 验证记录 |
-| 10 | [`10-skia-refactor-cmake.md`](10-skia-refactor-cmake.md) | **当前重点**：SkiaGpuBackend 重构 + CMakeLists 分层规范 + Windows 继续开发 |
+| 10 | [`10-skia-refactor-cmake.md`](10-skia-refactor-cmake.md) | 历史记录：SkiaGpuBackend 重构 + CMakeLists 分层规范（规范仍有效） |
 
 ## 当前进度（本次 Skia 重构提交）
 
@@ -72,16 +75,19 @@ macOS / Metal
 - macOS 180° + 1.21× 缩放：
   ![mac 180°](images/macos-180-zoom.png)
 
-## 三条不可协商的原则
+## 协作规则（2026-11-13 起）
 
-1. **用户写实现代码**（`.cpp/.hpp/.mm/.hlsl/.metal`），agent 写 CMake、建空文件、给逐处改法。
-2. **交付前先在 `temp_and_scratch/` 副本里验证**（配置→构建→运行→截图），不要动用户工作区。
-3. **不自动提交**；用户说 commit 才提交，且提交前构建必须绿。
+**当前规则以 [`../../AGENTS.md`](../../AGENTS.md) 为准**：实现代码由 agent 编写、agent 本地 commit、
+用户 push、禁止未经授权的远程写操作、每阶段双平台验收。
+
+以下是 2026-11-13 之前的历史原则（保留作背景）：
+
+1. 用户写实现代码（`.cpp/.hpp/.mm/.hlsl/.metal`），agent 写 CMake、建空文件、给逐处改法。
+2. 交付前先在 `temp_and_scratch/` 副本里验证。
+3. 不自动提交。
 
 ## 给新 agent 的第一句话
 
-Mac：把 [`09-skia-backend.md`](09-skia-backend.md) §6 的启动提示词粘贴给 macOS 上的 agent
-（自带"先读哪些文件 + 第一个任务 = Skia 的 MetalBridge 适配"）。
-
-Windows：`AGENTS.md` + `01` 即可；如果要继续改渲染器，再读 `08` §3（重构后的分层）
-和 `09` §2（Skia 实现细节）。
+先读 [`../../AGENTS.md`](../../AGENTS.md) 和 [`../ROADMAP.md`](../ROADMAP.md)；
+需要历史代码地图/踩坑时，再按本目录索引翻 `01`–`10`。
+当前阶段与验收标准只在 `ROADMAP.md` 维护。

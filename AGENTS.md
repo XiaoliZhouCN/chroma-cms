@@ -1,113 +1,145 @@
 # AGENTS.md — ChromaCMS 协作指南（全平台通用）
 
-> 本文件是**所有 AI 协作 agent 的唯一入口**。Windows（D3D12）与 macOS（Metal）两个方向都先读这里，
-> 再按 `docs/handoff/` 下的文档顺序继续。
+> 本文件是**所有 AI 协作 agent 的唯一入口**。先读本文件，再按 §2 的顺序读文档。
+> **仓库方向以 [`docs/ROADMAP.md`](docs/ROADMAP.md) 为准**；本文件只管"怎么协作"。
+
+---
 
 ## 0. 项目是什么
 
-ChromaCMS 是一个**手写渲染器**练习项目：用 Qt 做窗口，用自己的渲染器把一张 10-bit PQ（HDR）测试图
-正确显示出来，并实现色彩管理（PQ EOTF → 色域转换 → 显示输出）。
+ChromaCMS 是一个**色彩管理学习 + 工程实践**仓库，双主线：
 
-- 当前工作分支：**`practice`**（手写练习分支，没有文档门禁、不用写 ADR）
-- `develop`：完整参考实现（**与 practice 没有共同祖先**，只能按文件借用，不要 merge）
+1. **理论学习**：把"文件字节 → 屏幕像素"的完整色彩管理链路（容器/元数据/解码/传递函数/色域/色调映射/系统合成/显示）学透；
+2. **工程实践**：实现一个可长期维护、精确、多格式覆盖的跨平台色彩管理渲染引擎（三后端 + CPU oracle + 测试体系）。
+
+- 工作分支：**`practice`**
+- `develop`：完整参考实现（**与 practice 无共同祖先**，只能按文件借用，**不要 merge**）
 - `main`：空
 
-## 1. 最重要的规则（违反即返工）
+**一次实践 = 一篇理论文档 + 一个可运行实验 + 一组测试断言**，三者缺一不算完成。
 
-1. **渲染器实现代码由用户本人写**：`.cpp` / `.hpp` / `.mm` / `.hlsl` / `.metal`。
-2. **agent 负责**：
-   - 写 `CMakeLists.txt`、`cmake/*.cmake`、`CMakePresets.json`
-   - 创建**空文件**（0 字节）作为占位
-   - 给出**逐处改法**：改哪个文件、在哪一行之后插入、完整代码块
-3. **不要在用户工作区做实验**。复制到 `temp_and_scratch/`（已 gitignore）里打补丁、构建、运行、验证，
-   验证完删掉，只保留截图。
-4. **交付前必须自验**：配置 + 构建 + 运行 + 截图（或日志）。不允许"应该可以"式交付。
-5. **不自动提交**。用户明确说"commit"才提交；提交前构建必须是绿的。
-6. **头文件一律 `.hpp`**。
+---
+
+## 1. 最重要的规则
+
+1. **实现代码由 agent 编写**（`.cpp` / `.hpp` / `.mm` / `.hlsl` / `.metal` / `.sksl`）。
+   用户负责方向、关键决策与验收。
+2. **每次改动必须给出报告**：`文件:行` 锚点 + 改了什么 + **为什么** + 验证结果。
+   不允许"顺手重构/静默重排"，不允许改与任务无关的代码。
+3. **交付前必须自验**：构建（双平台阶段要双端）+ `ctest` + 运行/截图。
+   不允许"应该可以"式交付。
+4. **提交**：agent 在**本地** commit（按可验证里程碑）；**push 由用户执行**。
+5. **远程仓库**：**未经用户明确授权，禁止任何远程写操作**（push / tag / 建 PR / 删除远程分支等）。
+6. 头文件一律 **`.hpp`**。
 7. 用中文交流；代码注释用中文；学习型注释沿用 `// Q: ...` / `// A: ...` 的问答风格。
-8. 不要顺手重排/格式化用户的代码。
+8. 新增第三方依赖前必须问用户（已批准：FFmpeg、预编译 Skia、**lcms2 仅用于 ICC 解析/交叉校验**）。
+9. 学习内容变化时，同步更新对应 `docs/color/` 文章与测试断言。
+
+---
 
 ## 2. 先读哪些文档
 
 | 顺序 | 文件 | 内容 |
 |---|---|---|
-| 1 | `docs/handoff/README.md` | 索引、当前进度、怎么开始 |
-| 2 | `docs/handoff/01-project-state.md` | 已实现什么、代码地图、环境、验证证据 |
-| 3 | `docs/handoff/02-collaboration-protocol.md` | 协作协议、交付格式、验证配方、用户偏好 |
-| 4 | `docs/handoff/03-metal-plan.md` | **macOS/Metal 移植方案**（D3D12→Metal 映射、MSL、路线图） |
-| 5 | `docs/handoff/04-dual-platform.md` | 双平台架构：渲染器工厂、CMake 条件、一致性测试 |
-| 6 | `docs/handoff/05-macos-setup.md` | macOS 环境搭建与排错 |
-| 7 | `docs/handoff/06-bootstrap-prompt.md` | 给新 agent 的启动提示词（历史；新的 mac 启动词在 `08` §11） |
-| 8 | `docs/handoff/07-windows-interaction.md` | Windows 交互适配（✅ 已完成，保留作原理参考） |
-| 9 | `docs/handoff/08-current-progress.md` | 历史进度：Windows 交互 + 渲染层重构 + MetalContext 拆分 |
-| 10 | `docs/handoff/09-skia-backend.md` | Skia 第三后端的实现与 mac 验证 |
-| 11 | `docs/handoff/10-skia-refactor-cmake.md` | **当前重点**：SkiaGpuBackend 重构 + CMakeLists 分层规范 + Windows 继续开发 |
+| 1 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | **仓库方向唯一来源**：定位、架构、阶段、验收、协作规则 |
+| 2 | `AGENTS.md`（本文件） | 协作规则与入口 |
+| 3 | [`docs/color/00-index.md`](docs/color/00-index.md) | 理论学习手册（L0–L5、文章索引、实验与断言映射） |
+| 4 | [`docs/testing/00-index.md`](docs/testing/00-index.md) | 测试手册（unit/integration/e2e、阈值、资产策略） |
+| 5 | [`docs/handoff/`](docs/handoff/) | 工程交接与历史方案（**历史记录，不再是方向来源**） |
 
-## 3. 平台现状
+历史背景：`docs/handoff/01`–`10` 记录了 Windows/macOS 两端的早期开发与重构过程，可作为代码地图与踩坑参考。
 
-| 平台 | 后端 | 进度 |
+---
+
+## 3. 平台现状（2026-11-13）
+
+| 平台 | 后端 | 状态 |
 |---|---|---|
-| Windows | 自写 D3D12 | 设备/交换链 → 三角形 → 纹理 → FFmpeg 解码 → PQ 色彩管线（单 pass，scRGB 16F）✅；交互（A/D/Q/E/R）✅（`42518f8`）；渲染层重构：`gfx/d3d12/D3D12Context` + `render/d3d12/D3D12Renderer` ✅ |
-| macOS | 自写 Metal | M1 清屏 → M2 全屏三角形 → M3 纹理 → M4 PQ→Display-P3 → 90° 旋转/缩放交互 ✅；MetalContext + MetalRenderer .cpp/.mm 拆分 ✅；Skia（Ganesh Metal）基础适配 ✅；M5 部分完成 |
+| Windows | 手写 D3D12 | 设备/交换链/三角形/纹理/FFmpeg 解码/PQ 单 pass 色彩管线/交互（A/D/Q/E/R）✅ |
+| Windows | Skia（Ganesh D3D12） | 第三后端 ✅（`SkiaRenderer` + `SkiaGpuBackendD3D12`） |
+| macOS | 手写 Metal | M1–M4 + 交互 ✅；`MetalContext`/`MetalRenderer` 拆分 ✅ |
+| macOS | Skia（Ganesh Metal） | 第三后端 ✅（`SkiaGpuBackendMetal`） |
 
-> 目录约定（重构后）：`src/gfx/<api>/` 放原生上下文（设备/交换链/同步），
-> `src/render/<api>/` 放后端绘制；两者各自按平台条件编译。
+**当前显示方案的局限**：只有单图、单目标色域（Windows scRGB / mac Display-P3 刻意不同）、无容器/元数据层、无测试语料。
+新方向由 `docs/ROADMAP.md` 定义：完整链路 + 多格式 + CPU oracle + 三级测试 + **双视图对照**。
 
-两块屏的实际情况（Windows 侧已探测）：内屏 SDR/8bpc，外接 ASUS VG32AQL1A 通过 HDMI 2560×1440@60
-且 **HDR 已启用**、8bpc。所以"同一套颜色输出在两块屏上表现不同"是预期现象。
+**双视图对照（后续所有验收的标准画面）**：
 
-**当前两侧色域是刻意不同的**：
+```
+左：裸原生 API（手写 D3D12 / 手写 Metal）
+右：Skia + 当前平台后端
+Tab：左 / 右 / 叠图（差值或透明度混合） + 元数据面板 / 管线开关
+```
 
-- Windows：BT.709 / scRGB，`outputScale = 0.8`；
-- macOS：Display-P3 线性，`outputScale = 1.0`，暂不设置 `CAEDRMetadata`。
-
-共享的是 PQ EOTF 和 BT.2020→XYZ；最后一步矩阵按平台不同。交互矩阵两侧共用。
+---
 
 ## 4. 常用命令
 
-Windows（PowerShell，注意执行策略）：
+Windows（PowerShell）：
 
 ```powershell
 cmake --preset windows-x64-debug -DQT_ROOT="D:/Applications/QtCreator/6.11.1/msvc2022_64"
 cmake --build --preset windows-x64-debug
+ctest --preset windows-x64-debug
 .\build\windows-x64-debug\Debug\ChromaCMS.exe
+
+# Skia 后端（仅 Release）
+cmake --preset windows-x64-skia -DQT_ROOT="D:/Applications/QtCreator/6.11.1/msvc2022_64"
+cmake --build --preset windows-x64-skia
+.\build\windows-x64-skia\Release\ChromaCMS.exe
 ```
 
-macOS（详见 05）：
+macOS（详见 `docs/handoff/05`）：
 
 ```bash
 export QT_ROOT=$(brew --prefix qt)
 cmake --preset macos-arm64-debug
 cmake --build --preset macos-arm64-debug
-open build/macos-arm64-debug/ChromaCMS.app    # 或直接跑 .app/Contents/MacOS/ChromaCMS
+ctest --preset macos-arm64-debug
+open build/macos-arm64-debug/ChromaCMS.app
+
+# Skia 后端（仅 Release）
+cmake --preset macos-arm64-skia
+cmake --build --preset macos-arm64-skia
 ```
+
+注意：`skia` 预设**只生成 Release 配置**（预编译 Skia 不兼容 Debug CRT / 迭代器调试级别）。
+
+---
 
 ## 5. 已踩过的坑（避免重复踩）
 
 | 平台 | 坑 | 处理 |
 |---|---|---|
-| Windows | PowerShell 执行策略 AllSigned，`.ps1` 跑不了 | `powershell -NoProfile -ExecutionPolicy Bypass -File xxx.ps1` |
+| 通用 | 改 `.sksl`/`.hlsl`/`.metal` 后输出目录仍是旧文件 | `POST_BUILD` 才拷贝；重新构建或手动拷到输出目录 `shaders/` |
+| 通用 | Skia 失败路径静默黑屏 | 检查 `makeShader` 返回值与 `effect->uniformSize() == sizeof(struct)` |
+| 通用 | SkSL 方言与 HLSL/MSL 不同 | 向量/标量不能混参（`pow(float3, float3)`）、局部变量不能随便 `const` |
+| 通用 | Skia `float3x3` uniform 布局 | 9 个 float 紧凑排列（36 B），不是 std140 的 48 B |
+| 通用 | `makeShader` 的 `localMatrix` 方向 | 需传"设备像素→图片像素"映射的**逆矩阵**；并 `clipRect` 到视口 |
+| 通用 | 截图 ≠ 屏幕 | 系统色彩管理会处理截图；数值断言用 CPU oracle，截图只作人工证据 |
+| Windows | PowerShell 执行策略 AllSigned | `powershell -NoProfile -ExecutionPolicy Bypass -File xxx.ps1` |
 | Windows | `Start-Process` 启动 GUI app 会挂住工具调用 | 必须重定向 stdout/stderr 到文件 |
 | Windows | 用 `Get-Content -Raw` + `Set-Content` 改中文文件会乱码 | 用 `[System.IO.File]::ReadAllText/WriteAllText` + UTF8 无 BOM |
-| Windows | 无 `pwsh` 时的 Add-Type 只支持 FullLanguage | 当前会话是 danger-full-access，正常可用 |
-| 通用 | 改着色器不用重编 exe（运行时编译，但 POST_BUILD 才会拷贝） | 改完 `Copy-Item shaders\* 到输出目录` 再跑 |
-| 通用 | 空 `.cpp` 会让 AUTOMOC 警告 | 填上内容即消失，不影响构建 |
 | macOS | 截图需要"屏幕录制"权限 | 系统设置 → 隐私与安全性 → 屏幕录制，给终端授权 |
 | macOS | Qt 来自 Homebrew 时 `find_package(Qt6)` 需要前缀 | 设置 `QT_ROOT`（预设已用 `$penv{QT_ROOT}`） |
-| macOS | `INTERFACE` 库上用了 `PUBLIC`/`PRIVATE` 目标属性 → configure 直接失败 | CMake 规则：INTERFACE 库只能设 INTERFACE 属性；`src/gfx/CMakeLists.txt` 已按目标类型判定作用域 |
-| macOS | `src/gfx/metal/` 空目录不会进 git，clone 后不存在 | agent 建 `MetalContext` 空文件时先建目录 |
-| macOS | `MetalContext.hpp` 若 include `<Metal/Metal.h>`，纯 CXX 的 `RendererFactory.cpp` 编不过 | 头文件纯 C++ + pimpl + `void*` 句柄，ObjC 类型只出现在 `.mm` |
+| macOS | `INTERFACE` 库上用了 `PUBLIC`/`PRIVATE` 属性 → configure 失败 | INTERFACE 库只能用 INTERFACE 属性 |
+| macOS | `MetalContext.hpp` include `<Metal/Metal.h>` 会让纯 CXX 的工厂编不过 | 头文件纯 C++ + pimpl + `void*` 句柄，ObjC 只在 `.mm` |
 
-## 6. 交付时的自检清单
+---
 
-- [ ] 构建绿（完整配置 + 构建日志）
-- [ ] 运行过，不是只编译
-- [ ] 有截图或关键日志作为证据
-- [ ] 没有修改用户的源码文件（`git status` 干净或只剩用户自己的改动）
-- [ ] 改动清单里每处都有"在哪一行之后插入"的锚点
-- [ ] 常见错误表写清楚（用户跑失败时能自查）
+## 6. 交付自检清单
 
-## 7. CMakeLists 分层规范（2026-11-11）
+- [ ] 构建绿（会受影响的平台都要构建）
+- [ ] `ctest` 通过（新增功能必须带测试）
+- [ ] 运行过，并给出双视图截图或关键日志
+- [ ] 改动报告：锚点 + 改了什么 + 为什么 + 验证结果
+- [ ] 没有改与任务无关的代码/格式化
+- [ ] 学习内容变化时，`docs/color/` 与测试断言同步更新
+- [ ] `git status` 检查（不把 `external/`、`build/`、`temp_and_scratch/` 混进提交）
+
+---
+
+## 7. CMakeLists 分层规范（2026-11-11，保留）
 
 完整说明见 `docs/handoff/10-skia-refactor-cmake.md` §3。要点：
 
@@ -120,3 +152,44 @@ open build/macos-arm64-debug/ChromaCMS.app    # 或直接跑 .app/Contents/MacOS
 5. `cmake/` 只放可复用模块：`QtBootstrap.cmake`、`FindFFmpeg.cmake`、`FindSkia.cmake`。
 6. INTERFACE target 只能用 INTERFACE 属性；`chroma_set_warnings()` 只对真实 target 调用。
 7. 叶子目录不要重复 `add_library()`，也不要在父目录直接列叶子源文件。
+
+---
+
+## 8. 学习文档规范（`docs/color/`）
+
+每篇固定五段：**概念 → 公式/数值例子 → 本仓库实验（可运行命令）→ 测试断言 → 常见误解**。
+
+- 文章编号与分层见 `docs/color/00-index.md`；
+- 文章里的公式与代码必须一致（以 `src/color` 的实现为准）；
+- 文章状态（计划/编写中/已发布）在索引中维护；
+- 数值例子必须可手算或可用 `tools/` 复现。
+
+---
+
+## 9. 测试规范（`docs/testing/`）
+
+- 三层：unit（数学/解析）、integration（文件→管线→像素）、e2e（三后端 + 双视图）；
+- 判据：unit 绝对误差 1e-6~1e-5；integration SDR `ΔE2000 < 1.0`、HDR `ΔE ITP < 1.0`；e2e 后端间/对 oracle 在阈值内；
+- 参考必须来自 **CPU oracle**，不能用 GPU 输出当参考；
+- 阈值调整必须单独说明原因，不允许"调阈值让测试过"；
+- 小样本入库（<10 MB 总量），大文件走下载脚本并校验哈希。
+
+---
+
+## 10. 提交与远程（2026-11-13 变更）
+
+| 项 | 规则 |
+|---|---|
+| commit | agent 按可验证里程碑**本地提交**；提交信息遵守仓库风格 |
+| push | **由用户执行** |
+| 远程操作 | **未经明确授权，禁止 push / tag / PR / 删除远程分支等任何远程写操作** |
+| 工作区 | 可直接在工作区开发；实验验证放 `temp_and_scratch/`（gitignore） |
+| 回滚 | 用户可随时要求回滚；agent 不得用破坏性 git 命令（`reset --hard` 等）覆盖用户改动 |
+
+---
+
+## 11. 与旧文档的关系
+
+- `docs/handoff/01`–`10`：历史记录（早期协作模式：用户写实现、agent 给逐处改法）。
+  其中**技术原理**仍有效，**协作规则**已被本文件取代。
+- `docs/ROADMAP.md`：方向与阶段唯一来源，优先于所有历史文档。
