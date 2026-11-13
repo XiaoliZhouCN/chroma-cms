@@ -7,6 +7,8 @@
 | 路径 | 职责 |
 |---|---|
 | `doc-check/doc_check.cpp` | 目录文档规范检查（AGENTS/README/front-matter/链接） |
+| `chroma-probe/main.cpp` | 文件容器/元数据探测 CLI（JSON 输出） |
+| `scripts/gen-corpus.py` | 生成 `tests/corpus` 小样本（开发依赖 Pillow） |
 
 ## 依赖关系
 - 允许依赖：C++20 标准库。
@@ -14,7 +16,7 @@
 - 被依赖：仅 ctest / CI。
 
 ## 构建与测试
-- target：`doc_check`
+- target：`doc_check`、`chroma-probe`
 - ctest：`docs.structure`
 
 ```powershell

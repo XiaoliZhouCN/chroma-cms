@@ -8,6 +8,7 @@
 |---|---|---|
 | `core/` | 版本号等最小公共设施 | 无 |
 | `color/` | CPU 色彩管理 oracle（传递函数/矩阵/白点/输出编码） | C++ 标准库 |
+| `io/` | 容器识别 + 色彩元数据探测（不解码） | C++ 标准库 |
 | `gfx/` | 原生图形上下文（D3D12 / Metal） | 操作系统 API |
 | `media/` | FFmpeg 解码封装 | FFmpeg |
 | `render/` | 渲染后端（手写 D3D12/Metal、Skia） | `gfx`、`media`、`color` |

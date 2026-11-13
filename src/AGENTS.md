@@ -10,7 +10,7 @@ last_verified: 2026-11-13
 继承根 `AGENTS.md`。未在此声明的规则沿用父级；根 §1 硬规则不可覆写。
 
 ## 本地约定
-- 分层依赖方向：`app → render → gfx`，`app → media`；`color` 独立（不得依赖 Qt/gfx/render/media）；`gfx` 不得依赖 `render`。
+- 分层依赖方向：`app → render → gfx`，`app → media`；`color`、`io` 独立（不得依赖 Qt/gfx/render/media）；`gfx` 不得依赖 `render`。
 - 新增一级模块必须同时提交 `CMakeLists.txt` + `AGENTS.md` + `README.md`（见根 §12）。
 - 模块实现细节不上浮到父层头文件；跨模块只暴露稳定接口。
 

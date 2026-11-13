@@ -22,3 +22,11 @@ target_link_libraries(unit_color_matrix PRIVATE chroma_color)
 chroma_set_warnings(unit_color_matrix)
 
 add_test(NAME unit.color_matrix COMMAND $<TARGET_FILE:unit_color_matrix>)
+
+add_executable(unit_container_probe container_probe_test.cpp)
+target_link_libraries(unit_container_probe PRIVATE chroma_io)
+target_compile_definitions(unit_container_probe PRIVATE
+    CHROMA_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+chroma_set_warnings(unit_container_probe)
+
+add_test(NAME unit.container_probe COMMAND $<TARGET_FILE:unit_container_probe>)

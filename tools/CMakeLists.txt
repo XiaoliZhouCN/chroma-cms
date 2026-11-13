@@ -11,3 +11,10 @@ add_executable(doc_check
 
 target_compile_features(doc_check PRIVATE cxx_std_20)
 chroma_set_warnings(doc_check)
+
+add_executable(chroma-probe
+    chroma-probe/main.cpp)
+
+target_link_libraries(chroma-probe PRIVATE chroma_io)
+target_compile_features(chroma-probe PRIVATE cxx_std_20)
+chroma_set_warnings(chroma-probe)

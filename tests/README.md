@@ -10,7 +10,7 @@
 | `unit/` | 纯逻辑测试（color/io 等） |
 | `integration/`（计划） | 文件→解码→色彩→像素，对 golden/oracle |
 | `e2e/`（计划） | 三后端 offscreen 渲染对照、双视图 |
-| `corpus/`（计划） | 小样本测试资产 |
+| `corpus/` | 小样本测试资产（生成脚本：`tools/scripts/gen-corpus.py`） |
 | `golden/`（计划） | 参考输出与容差 |
 
 ## 依赖关系
