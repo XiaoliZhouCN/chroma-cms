@@ -54,11 +54,13 @@ void MainWindow::buildLayout(std::shared_ptr<const media::Image> image, const QS
     panelLayout->setContentsMargins(0, 0, 0, 0);
     panelLayout->setSpacing(4);
 
+    // 对比 panel-left native
     auto* leftGroup = new QGroupBox(QStringLiteral("左侧：手写原生 API"), panels);
     auto* leftLayout = new QVBoxLayout(leftGroup);
     m_left = new ViewportWidget(render::BackendKind::Native, image, leftGroup);
     leftLayout->addWidget(m_left);
 
+    // 对比 panel-right native
     auto* rightGroup = new QGroupBox(QStringLiteral("右侧：Skia 后端"), panels);
     auto* rightLayout = new QVBoxLayout(rightGroup);
     m_right = new ViewportWidget(render::BackendKind::Skia, image, rightGroup);

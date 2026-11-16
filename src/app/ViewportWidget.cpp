@@ -71,6 +71,7 @@ void ViewportWidget::ensureRenderer()
     m_initAttempted = true;
 
     try {
+        // step 1 init renderer
         auto renderer = render::createRenderer(m_backendKind);
         if (!renderer) {
             throw std::runtime_error("Skia 后端未编译（需要 skia Release 预设）");
@@ -83,11 +84,13 @@ void ViewportWidget::ensureRenderer()
 
         const char* backend = renderer->backendName();
         m_renderer = std::move(renderer);
-
+        
+        // step 2 set image
         if (m_image) {
             m_renderer->setImage(m_image->width, m_image->height, m_image->rgba16.data());
         }
 
+        // step 3 apply view transform
         applyViewTransform();
 
         qInfo().noquote() << "[gfx] backend =" << backend
@@ -102,6 +105,7 @@ void ViewportWidget::ensureRenderer()
 }
 
 /* ==================== Qt Event ==================== */
+// ViewportWidget entrance
 void ViewportWidget::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
@@ -162,6 +166,7 @@ void ViewportWidget::resizeEvent(QResizeEvent* event)
     update();
 }
 
+// Renderer present entrance
 void ViewportWidget::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
