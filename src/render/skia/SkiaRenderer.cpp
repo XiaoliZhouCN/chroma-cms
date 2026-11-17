@@ -72,6 +72,7 @@ bool SkiaRenderer::initialize(void *nativeWindow, std::uint32_t width, std::uint
     m_impl->height = height;
 
     // 1) 平台后端：D3D12 / Metal 的原生上下文与离屏目标
+    // 初始化后端
     m_impl->backend = createSkiaGpuBackend();
     if (!m_impl->backend->initialize(nativeWindow, width, height)) {
         throw std::runtime_error("SkiaGpuBackend::initialize 失败");
@@ -110,11 +111,17 @@ void SkiaRenderer::createOffscreenSurface()
 
 void SkiaRenderer::drawFrame()
 {
+    // step 1: 取离屏 canvas 并清屏。clear 色同时会作为 contain-fit 留边/图外区域的底色。
     SkCanvas *canvas = m_impl->surface->getCanvas();
     canvas->clear(SkColor4f{0.02f, 0.02f, 0.02f, 1.0f});
 
+    // 没有图像或 SkSL 还没编译好：只保留清屏，直接返回。
     if (m_impl->image == nullptr || m_impl->imageEffect == nullptr) { return; }
 
+    // step 2: 准备几何参数。
+    //   surface* 是离屏目标尺寸（= native 纹理尺寸，物理像素）；
+    //   image*   是源图尺寸；
+    //   q/c/s    是 90° 步进旋转的 cos/sin；invZoom 是缩放倒数（采样空间是"缩小"的）。
     const float surfaceW = static_cast<float>(m_impl->width);
     const float surfaceH = static_cast<float>(m_impl->height);
     const float imageW = static_cast<float>(m_impl->imageWidth);
@@ -127,7 +134,9 @@ void SkiaRenderer::drawFrame()
     const float s = (q == 1) ? 1.0f : (q == 3) ? -1.0f : 0.0f;
     const float invZoom = (m_impl->zoom > 0.0f) ? (1.0f / m_impl->zoom) : 1.0f;
 
-    // 1) contain-fit 视口（90°/270° 时宽高比翻转）
+    // step 3: contain-fit 视口。
+    //   旋转 90°/270° 时图片的显示宽高比会翻转，所以用 effectiveAspect；
+    //   先按比例缩到画面内，再居中，空出来的区域就是 letterbox 留边。
     const float effectiveAspect = ((q & 1) != 0) ? (1.0f / imageAspect) : imageAspect;
     float viewWidth = surfaceW;
     float viewHeight = surfaceH;
@@ -139,7 +148,6 @@ void SkiaRenderer::drawFrame()
     const float viewLeft = (surfaceW - viewWidth) * 0.5f;
     const float viewTop = (surfaceH - viewHeight) * 0.5f;
 
-    // 2) 设备像素 -> 图片像素 的仿射矩阵（旋转/缩放/视口全部编进来）
     const float cc = c * invZoom;
     const float ss = s * invZoom;
     const float u00 = cc;
@@ -157,15 +165,25 @@ void SkiaRenderer::drawFrame()
     const float bx = imageW * (0.5f - 0.5f * (u00 + u01) - (u00 * rx + u01 * ry));
     const float by = imageH * (0.5f - 0.5f * (u10 + u11) - (u10 * rx + u11 * ry));
 
+    // step 4: 合成"设备像素 -> 图片像素"的仿射矩阵。
+    //   把三步合进一个矩阵：
+    //     设备像素 -> contain-fit 视口内的 0..1 坐标
+    //     以视口中心为原点做 旋转 + 缩放（invZoom）
+    //     再映射到图片像素坐标（乘 imageSize）
+    //   矩阵按行存；aspect 归一化在 x 方向做，旋转/缩放才能保持不拉伸。
     SkMatrix deviceToImage;
     deviceToImage.setAll(a00, a01, bx, a10, a11, by, 0.0f, 0.0f, 1.0f);
 
-    // 3) makeShader 的 localMatrix 语义是"shader 局部空间 -> 绘制局部空间"，
-    //    所以这里传 设备像素->图片像素 的逆矩阵（实测方向，否则图像会缩成一小块）。
+    // step 5: 取逆矩阵作为 shader 的 localMatrix。
+    //   Skia 的 localMatrix 语义是"shader 局部空间 -> 绘制局部空间"；
+    //   我们要的是相反的"设备像素 -> 图片像素"，所以必须取逆。
     SkMatrix localMatrix;
     if (!deviceToImage.invert(&localMatrix)) { return; }
 
-    // 4) 色彩 uniform
+    // step 5.1: 色彩 uniform。
+    //   只有 3 项：图片尺寸（shader 里做边界判断）、outputScale（scRGB 缩放）、
+    //   xyzToTarget（XYZ -> 目标色域矩阵，Windows=BT.709，macOS=Display-P3）。
+    //   矩阵这里按行给，填 uniform 时转成列主序（SkSL 矩阵是列主序）。
     struct ImageUniforms {
         float imageSize[2];
         float outputScale;
@@ -205,8 +223,12 @@ void SkiaRenderer::drawFrame()
         uniforms.xyzToTarget[col * 3 + 2] = xyzToTargetRows[2][col];
     }
 
+    // step 5.2: 把 uniform 打包成 SkData。
+    //   必须与 .sksl 里的声明顺序/大小完全一致（当前 48 B；float3x3 = 9 个 float 紧凑排列）。
     sk_sp<SkData> data = SkData::MakeWithCopy(&uniforms, sizeof(uniforms));
 
+    // step 5.3: 创建图像子 shader（采样源）。
+    //   clamp 边界 + 线性过滤；它是 runtime effect 的 child shader，不是最终 shader。
     sk_sp<SkShader> imageShader = m_impl->image->makeShader(
         SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
     if (imageShader == nullptr) {
@@ -214,6 +236,8 @@ void SkiaRenderer::drawFrame()
         return;
     }
 
+    // step 6: 用 SkSL 程序 + uniform + 子 shader + 逆矩阵，生成最终 SkShader。
+    //   失败时必须返回并打日志，否则 paint 拿到空 shader 会退化成纯黑。
     SkRuntimeEffect::ChildPtr children[] = {SkRuntimeEffect::ChildPtr(imageShader)};
     sk_sp<SkShader> shader = m_impl->imageEffect->makeShader(
         std::move(data), SkSpan<const SkRuntimeEffect::ChildPtr>(children, 1), &localMatrix);
@@ -222,30 +246,48 @@ void SkiaRenderer::drawFrame()
         return;
     }
 
-    // 5) 与 D3D12 的 viewport/scissor 对齐：只画在 contain-fit 视口内，
-    //    否则放大后图像会溢出到留边区域。
+    // step 7: 与 D3D12/Metal 的 viewport/scissor 对齐。
+    //   只允许画在 contain-fit 视口内；否则 zoom 放大后图像会溢出到留边区域。
     canvas->save();
     canvas->clipRect(SkRect::MakeLTRB(viewLeft, viewTop, viewLeft + viewWidth, viewTop + viewHeight));
 
+    // step 8: 绘制。
+    //   对整块 surface 画一个矩形：shader 内部负责"像素 -> 图片坐标 + 边界判断 + 色彩转换"。
     SkPaint paint;
     paint.setShader(std::move(shader));
     canvas->drawRect(SkRect::MakeWH(surfaceW, surfaceH), paint);
 
+    // step 9: 恢复 canvas 状态（结束 step 7 的裁剪）。
     canvas->restore();
 }
+
 void SkiaRenderer::present()
 {
+    // step 0: 未初始化直接返回。
     if (!m_impl->initialized) { return; }
 
+    // step 1: 平台 backend 开始一帧（D3D12: 取 backbuffer/RTV；Metal: 取 drawable）。
+    //   失败（例如 nextDrawable 返回 nil）就跳过这一帧，不能继续提交。
     if (!m_impl->backend->beginFrame()) {
         return;
     }
 
-    // 1) Skia 画到离屏纹理，并提交（与原生队列同一队列，FIFO 保序）
+    // step 2: Skia 把这一帧画到离屏 surface。此时只是录制命令，GPU 还没执行。
     drawFrame();
+    
+    // step 3: 提交这一帧。
+    //   flush 阶段：Ganesh 把 canvas ops 转成 GrOps；首次采样图片时实例化懒纹理：
+    //     创建 GPU 纹理 + 把 CPU 像素 memcpy 进 upload/staging buffer + 录制 upload 拷贝命令；
+    //   submit 阶段：把命令交给 GPU（D3D12 ExecuteCommandLists / Metal commit）。
+    //   注意：flushAndSubmit() 默认只提交、不等待 GPU 完成；GPU 的 copy/draw 是异步执行的。
+    //   之后帧若命中纹理缓存，不再重复实例化/上传。
     m_impl->gr->flushAndSubmit();
+    // m_impl->gr->flushAndSubmit(GrSyncCpu::kYes);
 
-    // 2) 平台 backend 负责把离屏内容拷贝到后台缓冲并 present
+
+    // step 4: 平台 backend 结束一帧。
+    //   把离屏纹理拷贝到后台缓冲（D3D12: CopyResource；Metal: blit），处理状态/同步并 present。
+    //   因为同一队列 FIFO，拷贝一定在 step 3 的 Skia 提交之后执行，内容已就绪。
     m_impl->backend->endFrame(*m_impl->surface);
 }
 

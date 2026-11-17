@@ -87,7 +87,7 @@ void ViewportWidget::ensureRenderer()
         
         // step 2 set image
         if (m_image) {
-            m_renderer->setImage(m_image->width, m_image->height, m_image->rgba16.data());
+            m_renderer->setImage(m_image->width, m_image->height, m_image->rgba16.data());          // 获取该 vector 连续内存的首地址
         }
 
         // step 3 apply view transform
