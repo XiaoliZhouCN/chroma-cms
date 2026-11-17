@@ -1,0 +1,17 @@
+---
+id: 1c21b5b2-4c64-4180-adc3-96067f671414
+---
+flowchart TD
+showEvent_entrance["`showEvent()`"]
+showEvent_exit["`showEvent()`"]
+showEvent_entrance --- showEvent_exit
+
+ensureRenderer["`ensureRenderer()`"]
+ensureRenderer_note["`**note:** 初始化 renderer，创建并懒拷贝纹理`"]
+ensureRenderer --- ensureRenderer_note
+
+update["`update()`"]
+update_note["`**note:** 标记更新，下一次给ViewportWidget执行updateEvent？`"]
+update --- update_note
+
+showEvent_entrance --> ensureRenderer --> update ---> showEvent_exit
