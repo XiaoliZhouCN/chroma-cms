@@ -56,15 +56,16 @@ P3 系统显示链路（贯穿）
 
 ## 3. 代码映射（学完能落到哪里）
 
-| 知识点 | 代码位置 |
-|---|---|
-| 传递函数 | `src/color/transfer.*` |
-| primaries / 矩阵 / 适应 | `src/color/primaries.*`、`src/color/matrix.*` |
-| 色域映射 / tone mapping | `src/color/gamut.*`、`src/color/tonemap.*` |
-| 元数据解析 | `src/io/`（PNG/JPEG/TIFF/ISOBMFF/EXR + ICC） |
-| 解码 | `src/media/`（FFmpeg 封装） |
-| 显示目标决策 | `src/app/`（目标色彩描述选择） |
-| GPU 执行 | `src/render/`（三后端） |
+| 知识点 | 代码位置 | 状态 |
+|---|---|---|
+| 传递函数 | `src/color/Transfer.*` | ✅ 已落地 |
+| primaries / 矩阵 / 适应 | `src/color/Primaries.*`、`src/color/Matrix.*` | ✅ 已落地 |
+| 输出编码（相对亮度 ↔ scRGB） | `src/color/Output.*` | ✅ 已落地 |
+| 色域映射 / tone mapping | `src/color/gamut.*`、`src/color/tonemap.*` | P1 计划 |
+| 元数据解析 | `src/io/FileProbe.*`（容器/存在性） | ✅ 已落地；ICC 内容 P1 |
+| 解码 | `src/media/ImageLoader.*` | 图像解码已落地；Frame/ColorDescription P1 |
+| 显示目标决策 | `src/app/`（目标色彩描述选择） | P1 计划 |
+| GPU 执行 | `src/render/`（三后端） | ✅ 已落地 |
 
 ## 4. 参考标准（后面文章会引用）
 

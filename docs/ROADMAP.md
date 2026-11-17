@@ -4,6 +4,7 @@
 > 若其它文档与本文件冲突，以本文件为准。
 >
 > 更新日期：2026-11-13（方向重置）。基线：`practice` @ `bb96c7c`。
+> 进度快照：2026-11-17 — P0 完成（Windows 已验收；macOS 待验收）。
 
 ---
 
@@ -94,42 +95,45 @@ src/
   render/       后端（手写 D3D12、手写 Metal、Skia）
   app/          Qt UI：双视图对照 + 元数据面板 + 管线开关
 tools/
-  chroma-probe  文件 → 容器/元数据/默认色彩解释（JSON 输出，供测试断言）
-  chroma-bench  性能基准
-  pattern-gen   合成测试图（渐变、色块、边界值、位深/色域矩阵）
+  chroma-probe  文件 → 容器/元数据/默认色彩解释（JSON 输出，供测试断言）✅
+  doc-check     目录文档规范检查（ctest: docs.structure）✅
+  chroma-bench  性能基准（P4 计划）
+  pattern-gen   合成测试图（P1 计划）
 tests/
-  unit/ integration/ e2e/ corpus/ golden/
+  unit/         ✅（6 项接入 ctest）
+  corpus/       ✅（小样本 + 生成/下载脚本）
+  integration/  P1 计划
+  e2e/          P1 计划
+  golden/       P1 计划
 docs/
   color/  testing/  handoff/  ROADMAP.md
 ```
 
-### 3.1 数据模型（方向性草案）
+### 3.1 数据模型（已落地 + 草案）
+
+**已落地（2026-11-17）**：`src/color` 的 `Rgb/Xyz/TransferFunction/Primaries/ColorSpace`、`Mat3`；
+`src/io` 的 `FileProbe`（容器/尺寸/位深/帧数/元数据存在性 + `notes`，不持有 ICC 字节）：
 
 ```cpp
 namespace chroma::color {
 struct Rgb { double r, g, b; };
 struct Xyz { double x, y, z; };
-
 enum class TransferFunction { Linear, Srgb, Gamma22, Gamma24, Pq, Hlg };
 struct Primaries { double rx, ry, gx, gy, bx, by, wx, wy; };
 struct ColorSpace { Primaries primaries; TransferFunction transfer; };
 }
 
 namespace chroma::io {
-enum class MetadataKind { ICC, Cicp, Nclx, SrgbChunk, ChrmGama, ExifColorSpace, HdrStatic };
-struct ColorMetadata { MetadataKind kind; std::vector<std::byte> bytes; std::string source; };
-}
-
-namespace chroma::media {
-struct Frame {
-    std::uint32_t width, height;
-    PixelFormat format;                 // YUV/RGB、位深、chroma、range
-    std::vector<Plane> planes;
-    chroma::color::ColorDescription color;   // 解析后的色彩描述
-    std::vector<chroma::io::ColorMetadata> provenance;  // 元数据来源
+struct FileProbe {
+    FileKind kind; std::uint32_t width, height, bitsPerChannel, frames;
+    bool hasIcc, hasSrgbChunk, hasCicp, hasNclx, hasHdrStatic;
+    std::vector<ColorMetadataEntry> metadata; std::vector<std::string> notes;
 };
 }
 ```
+
+**P1 草案**：`ColorMetadata`（ICC/cICP/nclx 字节与来源）、`media::Frame`（PixelFormat + planes +
+ColorDescription + provenance）。
 
 ### 3.2 设计原则
 
@@ -149,7 +153,7 @@ struct Frame {
 | integration | 文件 → Frame → 色彩转换 → 输出 | ΔE2000 < 1.0（SDR）；ΔE ITP < 1.0（HDR） |
 | e2e | 三后端 offscreen render → readback → 互比 + 对 CPU oracle | 后端间与 oracle 差异 < 阈值；截图仅辅助 |
 
-测试资产：`tests/corpus/` 小样本入库（<10 MB）；大文件用 `tools/fetch-corpus.ps1`（或 .sh）下载并校验哈希；`pattern-gen` 生成合成图；`tests/golden/` 存参考输出与容差。
+测试资产：`tests/corpus/` 小样本入库（<10 MB）；大文件用 `tools/scripts/fetch-corpus.ps1` 下载并校验哈希（当前列表为空）；`pattern-gen`（P1）生成合成图；`tests/golden/`（P1）存参考输出与容差。
 
 ---
 
@@ -163,13 +167,16 @@ struct Frame {
 │  Windows: 手写 D3D12          │  Windows: Ganesh D3D12        │
 │  macOS:   手写 Metal          │  macOS:   Ganesh Metal        │
 └──────────────────────────────┴──────────────────────────────┘
-   [Tab: 左 / 右 / 叠图(差值或透明度混合)]   元数据面板 / 管线开关
+   [Tab: 左 / 右 / 并排（已落地）]   [叠图（P1）]   元数据面板 / 管线开关（P1+）
 ```
 
 验收要求：
 - 两侧使用**同一份输入、同一份目标色彩描述**；
 - 截图对比 + 像素/ΔE 量化（e2e 测试）；
 - 叠图模式用于快速发现几何/颜色偏差。
+
+**当前实现（2026-11-17）**：双视图骨架已落地（默认并排，Tab：左/右/并排）；
+叠图、元数据面板、管线开关为 P1 计划。
 
 ---
 
@@ -188,9 +195,10 @@ struct Frame {
 
 **验收**：双平台构建绿；ctest 通过；双视图能显示左右两份结果。
 
-**P0 状态（2026-11-13）：完成。** 已交付：`src/color` CPU oracle、`src/io` 容器探测、
-`tools/chroma-probe`、`tests/corpus` + 生成/下载脚本、`docs/color/01` 首篇 + `unit.container_probe`、
-双视图骨架（左/右/并排 Tab）。**叠图**需要离屏合成/差值渲染，放到 P1。
+**P0 状态（2026-11-17）：Windows 已验收，macOS 待验收。** 已交付：`src/color` CPU oracle、
+`src/io` 容器探测、`tools/chroma-probe`、`tests/corpus` + 生成/下载脚本、
+`docs/color/01` 首篇 + `unit.container_probe`、目录文档规范（`docs.structure` 门禁）、
+双视图骨架（默认并排；Tab：左/右/并排）。**叠图**需要离屏合成/差值渲染，放到 P1。
 
 ### P1 · 静态图三轨并行：SDR / HDR / 双层（约 2–3 周）
 

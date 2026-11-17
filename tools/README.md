@@ -9,6 +9,7 @@
 | `doc-check/doc_check.cpp` | 目录文档规范检查（AGENTS/README/front-matter/链接） |
 | `chroma-probe/main.cpp` | 文件容器/元数据探测 CLI（JSON 输出） |
 | `scripts/gen-corpus.py` | 生成 `tests/corpus` 小样本（开发依赖 Pillow） |
+| `scripts/fetch-corpus.ps1` | 下载外部大样本并校验 SHA-256（当前列表为空） |
 
 ## 依赖关系
 - 允许依赖：C++20 标准库。

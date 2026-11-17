@@ -53,7 +53,7 @@ ChromaCMS 是一个**色彩管理学习 + 工程实践**仓库，双主线：
 
 ---
 
-## 3. 平台现状（2026-11-13）
+## 3. 平台现状（2026-11-17）
 
 | 平台 | 后端 | 状态 |
 |---|---|---|
@@ -62,15 +62,19 @@ ChromaCMS 是一个**色彩管理学习 + 工程实践**仓库，双主线：
 | macOS | 手写 Metal | M1–M4 + 交互 ✅；`MetalContext`/`MetalRenderer` 拆分 ✅ |
 | macOS | Skia（Ganesh Metal） | 第三后端 ✅（`SkiaGpuBackendMetal`） |
 
-**当前显示方案的局限**：只有单图、单目标色域（Windows scRGB / mac Display-P3 刻意不同）、无容器/元数据层、无测试语料。
-新方向由 `docs/ROADMAP.md` 定义：完整链路 + 多格式 + CPU oracle + 三级测试 + **双视图对照**。
+**P0 进度（2026-11-17，Windows 已验收）**：`src/color` CPU oracle、`src/io` 容器探测、
+`tools/chroma-probe`、`tests/corpus`、`unit.container_probe`、`docs/color/01`、目录文档规范
+（`docs.structure` 门禁）、双视图骨架（默认并排：左原生 / 右 Skia）已落地。
+
+**当前局限**：内容仍是单图；ICC 解析/元数据优先级、多格式解码、integration/e2e 未接入；
+叠图需 P1 离屏合成；macOS 侧 P0 验收待完成。新方向见 `docs/ROADMAP.md`。
 
 **双视图对照（后续所有验收的标准画面）**：
 
 ```
 左：裸原生 API（手写 D3D12 / 手写 Metal）
 右：Skia + 当前平台后端
-Tab：左 / 右 / 叠图（差值或透明度混合） + 元数据面板 / 管线开关
+Tab：左 / 右 / 并排（已落地） / 叠图（P1：差值或透明度混合） + 元数据面板 / 管线开关（P1+）
 ```
 
 ---

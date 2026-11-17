@@ -13,11 +13,15 @@
 
 **仓库方向唯一来源： [`docs/ROADMAP.md`](docs/ROADMAP.md)。**
 
-## 当前状态（2026-11-13 方向重置）
+## 当前状态（2026-11-17）
 
-- 已具备：三后端单图显示、PQ 单 pass 色彩管线、交互、双平台构建；
-- 已具备：`docs/handoff/` 历史交接（早期 Windows/macOS 开发与重构记录）；
-- 进行中/待建：`src/color` CPU 参考、容器/元数据层、多格式解码、三级测试、**双视图对照 UI**。
+- **P0 完成（Windows 已验收）**：`src/color` CPU oracle、`src/io` 容器探测、
+  `tools/chroma-probe`、`tests/corpus` + `unit.container_probe`、`docs/color/01`、
+  目录文档规范（`docs.structure` 门禁）、双视图骨架；
+- **双视图**：左 = 手写原生（D3D12/Metal），右 = Skia；默认并排，Tab 支持 左 / 右 / 并排；
+  叠图需要离屏合成，放到 P1；
+- **待办**：macOS 侧 P0 验收（构建 + ctest + 双视图），随后进入 P1（SDR/HDR/双层三轨 + ICC）；
+- 当前内容仍是单图；ICC 解析/元数据优先级、多格式解码、integration/e2e 尚未接入。
 
 平台现状：
 
@@ -27,20 +31,20 @@
 | macOS | 手写 Metal、Skia（Ganesh Metal） |
 
 **验收标准画面（后续统一）**：左右双视图——左：裸原生 API；右：Skia + 当前平台后端；
-支持 Tab 切换与叠图对比。
+Tab 支持 左 / 右 / 并排（当前）；叠图对比在 P1 实现（需要离屏合成/差值渲染）。
 
 ## 目录
 
 ```
-src/color/     CPU 色彩管理（oracle）
-src/io/        容器探测 + 色彩元数据解析
-src/media/     FFmpeg 解码封装（Frame + ColorDescription）
+src/color/     CPU 色彩管理（oracle，已落地）
+src/io/        容器探测 + 色彩元数据存在性（已落地；ICC 内容解析 P1）
+src/media/     FFmpeg 图像解码（当前 RGBA16；Frame/ColorDescription P1）
 src/gfx/       原生上下文（D3D12 / Metal）
-src/render/    三后端
-src/app/       Qt UI（双视图对照 + 元数据面板）
-tools/         chroma-probe / chroma-bench / pattern-gen
-tests/         unit / integration / e2e / corpus / golden
-docs/          ROADMAP + color（学习手册）+ testing（测试手册）+ handoff（历史）
+src/render/    三后端（手写 D3D12 / 手写 Metal / Skia）
+src/app/       Qt UI（双视图骨架：左 / 右 / 并排）
+tools/         chroma-probe、doc-check、scripts（已落地）；chroma-bench、pattern-gen 计划
+tests/         unit（6 项已接入）+ corpus（已落地）；integration / e2e / golden 计划
+docs/          ROADMAP + color + testing + handoff + decisions + third-party
 ```
 
 ## 文档入口

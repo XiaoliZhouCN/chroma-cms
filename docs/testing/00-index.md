@@ -51,9 +51,9 @@
 | 资产 | 位置 | 规则 |
 |---|---|---|
 | 小样例 | `tests/corpus/` | 单文件 < 5 MB，总量 < 10 MB；入库 |
-| 大样例 | 下载脚本 `tools/fetch-corpus` | 校验 SHA-256；不入库 |
-| 合成图 | `tools/pattern-gen` | 确定性种子；可重现 |
-| 参考输出 | `tests/golden/` | 与生成脚本/版本绑定；更新需说明原因 |
+| 大样例 | 下载脚本 `tools/scripts/fetch-corpus.ps1` | 校验 SHA-256；不入库（当前列表为空） |
+| 合成图 | `tools/pattern-gen`（P1 计划） | 确定性种子；可重现 |
+| 参考输出 | `tests/golden/`（P1 计划） | 与生成脚本/版本绑定；更新需说明原因 |
 | 指标输出 | `tests/` 日志 | 失败时打印实际 ΔE/误差，便于定位 |
 
 ## 3. 怎么写一个测试
@@ -90,14 +90,29 @@ struct TransferCase { double code; double expectedLinear; };
 for (const auto &c : cases) { ... }
 ```
 
-## 4. golden 更新流程
+## 4. 当前落地状态（2026-11-17）
+
+已接入 ctest（`ctest --preset windows-x64-debug`，共 6 项）：
+
+| 测试名 | 覆盖 |
+|---|---|
+| `docs.structure` | 目录三件套、AGENTS front-matter、相对链接（`tools/doc-check`） |
+| `unit.smoke` | 构建与版本冒烟 |
+| `unit.color_math` | 白点、色域差、输出缩放、裁剪 |
+| `unit.color_transfer` | sRGB/gamma/PQ/HLG 已知值、端点、单调、往返 |
+| `unit.color_matrix` | 推导矩阵 vs shader 常量、求逆、Bradford |
+| `unit.container_probe` | `tests/corpus/` 容器/帧/元数据存在性 + 截断输入 |
+
+integration / e2e / golden / pattern-gen 尚未建立（P1 起逐步接入）。
+
+## 5. golden 更新流程
 
 1. 明确"为什么参考要变"（规范变化/实现修正），写进提交信息；
 2. 生成新 golden 的脚本必须与测试共用同一套 CPU oracle；
 3. 更新后必须同时在 Windows 与 macOS 跑通（双平台验收门槛）；
 4. 不允许"为了让测试通过而调阈值"——阈值调整要单独说明并评审。
 
-## 5. 反模式
+## 6. 反模式
 
 | 反模式 | 问题 |
 |---|---|
@@ -107,11 +122,11 @@ for (const auto &c : cases) { ... }
 | 一个 smoke 承担所有断言 | 失败无法定位 |
 | 用 GPU 输出当参考 | 参考必须来自 CPU oracle |
 
-## 6. 阶段测试清单
+## 7. 阶段测试清单
 
 | 阶段 | 必须新增 |
 |---|---|
-| P0 | 现有 color math 迁入 `src/color` 后的 unit 测试；容器探测测试（`unit.container_probe`） |
+| P0 | `src/color` unit 测试；容器探测测试（`unit.container_probe`）；目录文档门禁（`docs.structure`） |
 | P1 | 每种格式的元数据解析 unit；SDR/HDR/双层各自的 integration；双视图 e2e |
 | P2 | 视频首帧/连续帧 integration；四轨统一 ΔE 报告 |
 | P3 | 系统显示链路实验记录（非断言类）；环境参数化测试 |

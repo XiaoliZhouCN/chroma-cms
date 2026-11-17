@@ -3,8 +3,8 @@
 # 这里的工具不随 app 发布，只服务开发/测试：
 #   doc-check/   目录文档规范检查器（ctest: docs.structure）
 #
-# 后续工具（chroma-probe / chroma-bench / pattern-gen）先在该目录下加源文件，
-# 再在下面的 target 列表里注册。
+# 已有：doc_check（文档规范）、chroma-probe（容器探测）。
+# 后续工具（chroma-bench / pattern-gen）先在该目录下加源文件，再在下面的 target 列表里注册。
 
 add_executable(doc_check
     doc-check/doc_check.cpp)
