@@ -1,4 +1,4 @@
-# Pipeline In Mini Insight
+# Pipeline In Mini
 
 ## 1. 2个与渲染相关的 Entrance
 
@@ -70,11 +70,11 @@ renderer_initialize_exit["`renderer->initialize()`"]
 renderer_initialize_entrance --- renderer_initialize_exit
 
 backend_initialize["`backend->initialize()`"]
-backend_initialize_note["`**note:** 1. 创建对应gpu backend；2. 初始化backend；`"]
+backend_initialize_note["`**note:** 1. 创建对应gpu backend；2. 初始化backend；3. 创建ganish context`"]
 backend_initialize --- backend_initialize_note
 
-backend_makeGaneshContext["`backend->initialize()`"]
-backend_makeGaneshContext_note["`**note:** 创建ganish contex；`"]
+backend_makeGaneshContext["`backend->makeGaneshContex()`"]
+backend_makeGaneshContext_note["`**note:** 获取gr(ganish contex)`"]
 backend_makeGaneshContext --- backend_makeGaneshContext_note
 
 complie_shader["`// complie shader`"]
@@ -92,8 +92,8 @@ renderer_initialize_exit
 
 ```mermaid
 flowchart TD
-renderer_setImage_entrance["`renderer->initialize()`"]
-renderer_setImage_exit["`renderer->initialize()`"]
+renderer_setImage_entrance["`renderer->setImage()`"]
+renderer_setImage_exit["`renderer->setImage()`"]
 renderer_setImage_entrance --- renderer_setImage_exit
 
 make_image_info["`info = SkImageInfo::Make()`"]
@@ -163,7 +163,7 @@ drawFrame["`drawFrame()`"]
 drawFrame_note["`**note:** 录制绘制命令。1.获取离屏canvas； 2. 准备shader 参数并创建shader； 3. 绘制内容clip到允许绘制范围（contain-fit）； 4. 绘制；`"]
 
 grContext_flushAndSubmit["`gr->flushAndSubmit()`"]
-grContext_flushAndSubmit_note["`**note:** 上传命令`"]
+grContext_flushAndSubmit_note["`**note:** 1. 资源实例化；2. CPU 侧上传准备；3. 命令录制 4. 提交`"]
 
 backend_endFramee["`backend->endFrame()`"]
 backend_endFramee_note["`**note:** 结束本帧。 1. 拷贝离屏纹理； 2. 交换链present，更新下一张backbuffer。nextdrawable`"]
