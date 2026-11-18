@@ -17,6 +17,10 @@ struct DisplayState
     bool hdr = false;                 // DXGI_OUTPUT_DESC1.ColorSpace == G2084_NONE_P2020
     bool advancedColorSupported = false;
     bool advancedColorEnabled = false;
+    bool wideColorEnforced = false;
+    bool advancedColorForceDisabled = false;
+    DISPLAYCONFIG_COLOR_ENCODING colorEncoding = DISPLAYCONFIG_COLOR_ENCODING_RGB;
+    std::uint32_t configBitsPerColor = 0;
     std::uint32_t bitsPerColor = 0;
     DXGI_COLOR_SPACE_TYPE colorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
     double sdrWhiteNits = 80.0;       // DISPLAYCONFIG_SDR_WHITE_LEVEL
@@ -29,6 +33,7 @@ struct DisplayState
     float white[2] = {0.0f, 0.0f};
     std::wstring gdiName;
     std::wstring friendlyName;
+    std::wstring adapterName;
 };
 
 struct MonitorInfo
@@ -44,6 +49,7 @@ std::vector<MonitorInfo> enumerateMonitors();
 MonitorInfo monitorFromPoint(POINT point);
 std::string formatToString(DXGI_FORMAT format);
 std::string colorSpaceToString(DXGI_COLOR_SPACE_TYPE colorSpace);
+std::string colorEncodingToString(DISPLAYCONFIG_COLOR_ENCODING encoding);
 
 /// D3D11 + Desktop Duplication 的取色器。
 ///

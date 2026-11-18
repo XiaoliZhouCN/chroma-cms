@@ -105,6 +105,22 @@ std::string formatToString(DXGI_FORMAT format)
     }
 }
 
+std::string colorEncodingToString(DISPLAYCONFIG_COLOR_ENCODING encoding)
+{
+    switch (encoding) {
+    case DISPLAYCONFIG_COLOR_ENCODING_RGB:
+        return "RGB";
+    case DISPLAYCONFIG_COLOR_ENCODING_YCBCR444:
+        return "YCbCr444";
+    case DISPLAYCONFIG_COLOR_ENCODING_YCBCR422:
+        return "YCbCr422";
+    case DISPLAYCONFIG_COLOR_ENCODING_YCBCR420:
+        return "YCbCr420";
+    default:
+        return "encoding_" + std::to_string(static_cast<int>(encoding));
+    }
+}
+
 std::string colorSpaceToString(DXGI_COLOR_SPACE_TYPE colorSpace)
 {
     switch (colorSpace) {
@@ -215,6 +231,10 @@ bool ScreenCapture::createDeviceAndDuplication(HMONITOR monitor)
     }
 
     m_adapter = selectedAdapter;
+    DXGI_ADAPTER_DESC1 adapterDesc{};
+    if (SUCCEEDED(selectedAdapter->GetDesc1(&adapterDesc))) {
+        m_display.adapterName = adapterDesc.Description;
+    }
     m_desktopRect = desktopRect;
     m_width = desktopRect.right - desktopRect.left;
     m_height = desktopRect.bottom - desktopRect.top;
@@ -229,6 +249,7 @@ bool ScreenCapture::createDeviceAndDuplication(HMONITOR monitor)
         return false;
     }
     selectedOutput.As(&m_output5);
+    selectedOutput.As(&m_output6);   // 必须 QI 到 IDXGIOutput6，GetDesc1 才能拿到 HDR 色彩空间
     readOutputDesc1();
     queryDisplayState(monitor);
 
@@ -480,7 +501,10 @@ void ScreenCapture::queryDisplayState(HMONITOR monitor)
         if (DisplayConfigGetDeviceInfo(&colorInfo.header) == ERROR_SUCCESS) {
             m_display.advancedColorSupported = (colorInfo.value & 0x1) != 0;
             m_display.advancedColorEnabled = (colorInfo.value & 0x2) != 0;
-            m_display.bitsPerColor = colorInfo.bitsPerColorChannel;
+            m_display.wideColorEnforced = (colorInfo.value & 0x4) != 0;
+            m_display.advancedColorForceDisabled = (colorInfo.value & 0x8) != 0;
+            m_display.colorEncoding = colorInfo.colorEncoding;
+            m_display.configBitsPerColor = colorInfo.bitsPerColorChannel;
         }
 
         DISPLAYCONFIG_SDR_WHITE_LEVEL whiteLevel{};

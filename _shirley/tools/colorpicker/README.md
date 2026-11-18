@@ -45,17 +45,21 @@ cmake --build build --config Debug
 - `B8G8R8A8_UNORM`：SDR 8-bit（sRGB 编码），HDR 开启时读到的是截断后的值；
 - 窗口会显示当前捕获格式与显示器 HDR 状态，便于判断当前数据属于哪条路径。
 
-## 当前验证（2026-11-19，Windows 11 SDR 远程会话）
+## 当前验证（2026-11-19，本机 Console 会话）
 
-- `--list`：单显示器 1920×1200、SDR、BGRA8；
-- 用已知纯红窗口测试：`--dump --x 300 --y 300` 返回 `r=1.0 g=0.0 b=0.0`，与 GDI 读数一致；
-- GUI 截图确认：放大镜/色块/RGB 三行/显示状态均正常刷新；
-- **HDR 路径尚未在本会话验证**（当前显示器为 SDR 模式），需在开启 HDR 的显示器上运行
-  `--dump`，确认返回 `R16G16B16A16_FLOAT` 且数值为 scRGB。
+- DISPLAY1（VG32AQL1A）HDR 已开启：dxdiag 显示
+  `Display Color Space: DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020`、
+  `Active Color Mode: DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR`；
+  工具 `--list` 现在正确输出 `hdr=on`、`max_lum=603.7`；
+- **已知问题**：该 Intel UHD 驱动上，`IDXGIOutput5::DuplicateOutput1` 在 HDR 模式下
+  仍返回 `B8G8R8A8_UNORM`，HDR 数值被截断（白色读到 1.0）。下一步补
+  `Windows.Graphics.Capture` FP16 后端。
+- 已知纯红窗口测试：`--dump` 返回 `r=1.0 g=0.0 b=0.0`，与 GDI 读数一致；
+- 内屏 BOE 1920×1200 经 dxdiag 确认 `HDR Not Supported`，不是 HDR 屏。
 
 ## 已知限制
 
-- 若 `DuplicateOutput1` 在目标机器上只返回 BGRA8，HDR 数值不完整（后续补 WGC 后端）；
+- 本机 Intel UHD 上 HDR 模式下 `DuplicateOutput1` 只返回 BGRA8，HDR 数值不完整；WGC 后端待补；
 - 受保护内容 / 独占全屏 / secure desktop 会导致 `ACCESS_LOST`；\n- Desktop Duplication 刚初始化时可能先返回黑帧，随后桌面更新后恢复；`--dump` 会自动重试；
 - 显示器切换 HDR 开关后，状态最多延迟约 2 秒刷新；
 - 颜色块和放大镜使用 sRGB 近似预览，HDR 值 > 1 会被裁剪，仅作视觉参考。
