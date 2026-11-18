@@ -18,6 +18,19 @@
 - 不做格式选项、保存、热键、11×11 平均、ICC 转换；
 - 不保证"面板物理颜色"——软件只能读到合成后的 framebuffer 数值。
 
+## 换机/HDR 验证
+
+完整的问题记录、当前状态和换机测试步骤见 [`VERIFICATION.md`](VERIFICATION.md)。
+
+一键收集验证信息（推荐在新电脑上运行）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\verify.ps1
+```
+
+会生成 `verification-*.txt`，包含会话类型、GPU/当前模式、dxdiag HDR 字段、
+`--list` 与每个显示器中心点的 `--dump` 结果。
+
 ## 构建（Windows / MSVC + Qt6）
 
 ```powershell
