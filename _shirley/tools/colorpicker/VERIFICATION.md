@@ -352,7 +352,15 @@ sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
   Set-Service CaptureService -StartupType Automatic
   ```
 
-- 因此 **WGC 的 HDR 数值尚未验证**，需要在物理 HDR 控制台、且 `CaptureService` 运行的状态下跑一次。
+- 进一步验证：
+  - `GraphicsCaptureAccess.RequestAccessAsync(Programmatic)` 对未打包 Win32 返回
+    `NotDeclaredByApp(1)`；
+  - `CaptureService` 的 per-user 实例 `CaptureService_4a3b9` 实际是 **Running**，
+    模板服务 Stopped 属正常；
+  - 在 `ConsentStore\graphicsCaptureProgrammatic` 设为 `Allow` 后，programmatic
+    `CreateForMonitor` 仍返回 `E_ACCESSDENIED`。
+- 因此新增 **系统 picker 回退**：GUI 模式下若 programmatic 失败，弹出
+  `GraphicsCapturePicker`，用户选择目标显示器后继续走 WGC FP16。
 
 ### 6.3 在物理 HDR 控制台上的验证步骤
 
@@ -388,15 +396,18 @@ sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
 
 按顺序排查：
 
-1. `CaptureService` 是否为 `Running`（管理员启动，见 §6.2）；
-2. 是否在**物理控制台**而不是远程/Virtual Desktop 会话；
-3. 尝试用管理员权限运行 `colorpicker.exe`（部分安全策略下非提权进程会被拒绝）；
-4. 用 Windows 自带的 `Win+Shift+S`（截图工具）验证系统捕获栈是否正常：
-   如果系统截图也失败，说明是系统/策略问题，不是工具问题；
-5. 若 `CaptureService` 无法启动，检查：
-   - `sc.exe qc CaptureService`（应为 DEMAND_START）；
-   - 事件查看器 → Windows 日志 → 系统，找 `CaptureService` 相关错误；
-   - 安全软件/组策略/精简版系统镜像是否移除了 `CaptureService.dll`。
+1. **使用 GUI 的 picker 回退**（推荐）：
+   ```powershell
+   .\build\Debug\colorpicker.exe
+   ```
+   把鼠标移到 HDR 屏、保持 HDR 开启；如果 programmatic 被拒绝，工具会弹出
+   系统捕获选择框；选择 **目标显示器**（不是窗口），然后查看 stderr 是否出现
+   `[wgc] capture started`，再检查 `--dump`/GUI 的 backend 是否变成 WGC。
+2. `CaptureService` 是否为 `Running`（管理员启动，见 §6.2）；
+3. 是否在**物理控制台**而不是远程/Virtual Desktop 会话；
+4. 用 Windows 自带的 `Win+Shift+S`（截图工具）验证系统捕获栈是否正常；
+5. 若 picker 也失败，检查事件查看器 → Windows 日志 → 系统；
+6. `--dump` 没有 HWND，无法弹 picker；自动化测试请用 GUI。
 
 ### 6.5 已知限制
 

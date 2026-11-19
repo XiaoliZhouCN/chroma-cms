@@ -83,7 +83,7 @@ public:
     ScreenCapture();
     ~ScreenCapture();
 
-    bool initialize(HMONITOR monitor);
+    bool initialize(HMONITOR monitor, HWND owner = nullptr);
     void release();
 
     bool captureFrame();
@@ -117,6 +117,7 @@ private:
 
     std::unique_ptr<WgcCapture> m_wgc;
     Backend m_backend = Backend::Duplication;
+    HWND m_owner = nullptr;
 
     HMONITOR m_monitor = nullptr;
     RECT m_desktopRect = {};

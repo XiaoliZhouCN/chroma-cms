@@ -192,7 +192,7 @@ void MainWindow::initCapture(HMONITOR monitor)
         m_monitorRect = info.rcMonitor;
     }
 
-    m_captureReady = m_capture.initialize(monitor);
+    m_captureReady = m_capture.initialize(monitor, reinterpret_cast<HWND>(winId()));
     if (!m_captureReady) {
         m_formatLabel->setText(QStringLiteral("捕获初始化失败（HDR/独占全屏/受保护内容？）"));
         m_infoLabel->setText(QStringLiteral("无法初始化 Desktop Duplication。"));

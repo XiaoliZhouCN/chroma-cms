@@ -6,9 +6,11 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+#include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
 
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
+#include <shobjidl_core.h>
 
 #include <algorithm>
 #include <cmath>
@@ -61,13 +63,11 @@ WgcCapture::~WgcCapture()
     close();
 }
 
-bool WgcCapture::initialize(HMONITOR monitor)
+bool WgcCapture::initialize(HMONITOR monitor, HWND owner)
 {
     int step = 0;
     try {
         step = 1;
-        // 如果外部已经初始化 COM（Qt 通常是 STA），这里会返回 RPC_E_CHANGED_MODE；
-        // 对 free-threaded frame pool 不影响，忽略即可。
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
         }
@@ -79,6 +79,7 @@ bool WgcCapture::initialize(HMONITOR monitor)
             std::fprintf(stderr, "[wgc] GraphicsCaptureSession::IsSupported() = false\n");
             return false;
         }
+
         step = 3;
         const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
         D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
@@ -92,8 +93,7 @@ bool WgcCapture::initialize(HMONITOR monitor)
 
         step = 4;
         winrt::com_ptr<IDXGIDevice> dxgiDevice;
-        winrt::check_hresult(
-            m_impl->device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put())));
+        winrt::check_hresult(m_impl->device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put())));
 
         step = 5;
         winrt::com_ptr<::IInspectable> inspectable;
@@ -102,27 +102,76 @@ bool WgcCapture::initialize(HMONITOR monitor)
         const auto direct3DDevice =
             inspectable.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice>();
 
-        step = 6;
-        const auto factory =
-            winrt::get_activation_factory<winrt::Windows::Graphics::Capture::GraphicsCaptureItem,
-                                          ::IGraphicsCaptureItemInterop>();
-        step = 7;
-        winrt::com_ptr<::IInspectable> itemInspectable;
-        winrt::check_hresult(factory->CreateForMonitor(
-            monitor, winrt::guid_of<winrt::Windows::Graphics::Capture::GraphicsCaptureItem>(),
-            itemInspectable.put_void()));
-        m_impl->item =
-            itemInspectable.as<winrt::Windows::Graphics::Capture::GraphicsCaptureItem>();
+        // 1) 首选：programmatic monitor capture（需要系统截图权限）。
+        winrt::Windows::Graphics::Capture::GraphicsCaptureItem item{nullptr};
+        try {
+            step = 6;
+            const auto factory = winrt::get_activation_factory<
+                winrt::Windows::Graphics::Capture::GraphicsCaptureItem,
+                ::IGraphicsCaptureItemInterop>();
+            step = 7;
+            winrt::com_ptr<::IInspectable> itemInspectable;
+            winrt::check_hresult(factory->CreateForMonitor(
+                monitor,
+                winrt::guid_of<winrt::Windows::Graphics::Capture::GraphicsCaptureItem>(),
+                itemInspectable.put_void()));
+            item = itemInspectable.as<winrt::Windows::Graphics::Capture::GraphicsCaptureItem>();
+        }
+        catch (const winrt::hresult_error &error) {
+            std::fprintf(stderr,
+                         "[wgc] programmatic CreateForMonitor 失败: step=%d hr=0x%08lx\n", step,
+                         static_cast<unsigned long>(error.code().value));
+        }
 
-        step = 8;
-        const auto size = m_impl->item.Size();
+        // 2) 回退：系统 picker，让用户选择显示器（系统 UI 即用户同意）。
+        if (!item) {
+            if (owner == nullptr) {
+                std::fprintf(stderr, "[wgc] 无 owner HWND，无法弹出 picker\n");
+                return false;
+            }
+            step = 8;
+            try {
+                winrt::Windows::Graphics::Capture::GraphicsCapturePicker picker;
+                const auto initializeWithWindow = picker.as<::IInitializeWithWindow>();
+                winrt::check_hresult(initializeWithWindow->Initialize(owner));
+                auto picked = picker.PickSingleItemAsync().get();
+                if (!picked) {
+                    std::fprintf(stderr, "[wgc] picker 取消/未选择\n");
+                    return false;
+                }
+
+                // 必须是显示器，而不是窗口；否则采样坐标会错位。
+                winrt::com_ptr<::IMonitorGraphicsCaptureItemInterop> monitorInterop;
+                if (FAILED(winrt::get_unknown(picked)->QueryInterface(
+                        IID_PPV_ARGS(monitorInterop.put())))) {
+                    std::fprintf(stderr, "[wgc] picker 选择的是窗口，请选择显示器\n");
+                    return false;
+                }
+                HMONITOR pickedMonitor = nullptr;
+                winrt::check_hresult(monitorInterop->GetMonitor(&pickedMonitor));
+                if (pickedMonitor != monitor) {
+                    std::fprintf(stderr, "[wgc] picker 选择的不是目标显示器，请重试\n");
+                    return false;
+                }
+                item = picked;
+            }
+            catch (const winrt::hresult_error &error) {
+                std::fprintf(stderr, "[wgc] picker 失败: hr=0x%08lx\n",
+                             static_cast<unsigned long>(error.code().value));
+                return false;
+            }
+        }
+
+        m_impl->item = item;
         step = 9;
+        const auto size = m_impl->item.Size();
+        step = 10;
         m_impl->framePool =
             winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
                 direct3DDevice,
                 winrt::Windows::Graphics::DirectX::DirectXPixelFormat::R16G16B16A16Float, 2,
                 size);
-        step = 10;
+        step = 11;
         m_impl->session = m_impl->framePool.CreateCaptureSession(m_impl->item);
         try {
             m_impl->session.IsCursorCaptureEnabled(false);
@@ -134,7 +183,6 @@ bool WgcCapture::initialize(HMONITOR monitor)
         }
         catch (const winrt::hresult_error &) {
         }
-        step = 11;
         m_impl->session.StartCapture();
         std::fprintf(stderr, "[wgc] capture started: %d x %d\n", size.Width, size.Height);
         return true;

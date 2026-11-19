@@ -78,8 +78,8 @@ cmake --build build --config Debug
   已确定必须启用 WGC 备用方案。
 - **WGC 后端（2026-11-19 实现）**：MSVC 构建启用；HDR 屏自动优先使用 WGC FP16，
   取不到 WGC 时回退 Duplication；MinGW 仍只走 Duplication。
-  `%ws` 已改为标准 `%ls`（MinGW 兼容）。
-  WGC 还没在物理 HDR 控制台验证（本会话 `CreateForMonitor` 返回 `E_ACCESSDENIED`），
+  programmatic `CreateForMonitor` 被系统拒绝（`E_ACCESSDENIED`）时，会弹系统 picker
+  让用户选择显示器；`%ws` 已改为标准 `%ls`（MinGW 兼容）。
   详见 [`VERIFICATION.md`](VERIFICATION.md) §5/§6。
 
 ## 已知限制
@@ -87,9 +87,10 @@ cmake --build build --config Debug
 - 本机 Intel UHD 上 HDR 模式下 `DuplicateOutput1` 只返回 BGRA8，HDR 数值不完整；
   WGC 后端已实现（`src/WgcCapture.*`），但需要在本机物理控制台 + HDR 下验证；
   WGC 仅在 MSVC 构建启用（CMake 自动检测 SDK C++/WinRT）；MinGW 构建保持 Duplication；
-- 某些会话/远程环境会拒绝 `CreateForMonitor`（`E_ACCESSDENIED`），WGC 会回退到 Duplication；
-  WGC 依赖 Windows 的 `CaptureService`，若该服务被停止/禁用，需要管理员启动：
-  `Start-Service CaptureService`；
+- 某些系统/策略会拒绝 programmatic WGC（`CreateForMonitor` 返回 `E_ACCESSDENIED`）。
+  工具会自动改用**系统 picker**：运行 GUI（从 cmd/PowerShell 启动以便看 stderr），
+  在系统弹出的捕获选择框中选择**目标显示器**，即可走 WGC FP16；
+  picker 需要 GUI 窗口，`--dump` 无窗口时无法使用 picker，只能回退 Duplication；
 - 受保护内容 / 独占全屏 / secure desktop 会导致 `ACCESS_LOST`；
 - Desktop Duplication / WGC 刚初始化时可能先返回黑帧，随后桌面更新后恢复；`--dump` 会自动重试；
 - 显示器切换 HDR 开关后，状态最多延迟约 2 秒刷新；

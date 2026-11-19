@@ -141,10 +141,11 @@ ScreenCapture::ScreenCapture() = default;
 
 ScreenCapture::~ScreenCapture() = default;
 
-bool ScreenCapture::initialize(HMONITOR monitor)
+bool ScreenCapture::initialize(HMONITOR monitor, HWND owner)
 {
     release();
     m_monitor = monitor;
+    m_owner = owner;
     if (!createDeviceAndDuplication(monitor)) {
         release();
         return false;
@@ -157,17 +158,24 @@ bool ScreenCapture::initialize(HMONITOR monitor)
                           wgcFlag[0] != '0';
     if (m_display.hdr || forceWgc) {
         // HDR 输出：先看 Duplication 是否真的能给出 FP16；给不出就切 WGC。
-        bool duplicationHasFp16 = captureFrame() &&
-                                  m_frameFormat == DXGI_FORMAT_R16G16B16A16_FLOAT;
+        bool duplicationHasFp16 = false;
+        if (!forceWgc) {
+            duplicationHasFp16 = captureFrame() &&
+                                 m_frameFormat == DXGI_FORMAT_R16G16B16A16_FLOAT;
+        }
         if (!duplicationHasFp16) {
+            // WGC 和 Desktop Duplication 可能互斥：先释放 duplication，再初始化 WGC。
+            m_duplication.Reset();
+            m_copyTexture.Reset();
+            m_hasFrame = false;
             auto wgc = std::make_unique<WgcCapture>();
-            if (wgc->initialize(monitor)) {
+            if (wgc->initialize(monitor, m_owner)) {
                 m_wgc = std::move(wgc);
                 m_backend = Backend::Wgc;
-                m_hasFrame = false;
             }
             else {
                 std::fprintf(stderr, "[capture] WGC 初始化失败，回退 Duplication（HDR 数值可能被截断）\n");
+                recreateDuplication();
             }
         }
     }
@@ -190,6 +198,7 @@ void ScreenCapture::release()
     m_context.Reset();
     m_device.Reset();
     m_monitor = nullptr;
+    m_owner = nullptr;
     m_hasFrame = false;
     m_frameFormat = DXGI_FORMAT_UNKNOWN;
     m_width = 0;

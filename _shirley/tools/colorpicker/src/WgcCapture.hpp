@@ -31,7 +31,7 @@ public:
     WgcCapture();
     ~WgcCapture();
 
-    bool initialize(HMONITOR monitor);
+    bool initialize(HMONITOR monitor, HWND owner);
     void close();
 
     bool captureFrame();
