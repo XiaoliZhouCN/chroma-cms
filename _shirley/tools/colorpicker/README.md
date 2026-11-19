@@ -7,8 +7,11 @@
 
 - Qt6 小窗口置顶，连续跟随鼠标取色；
 - 放大镜 100×80（16×）+ 颜色块 50×50 + 3 行原始 RGB；
-- 捕获后端：`IDXGIOutput5::DuplicateOutput1`，优先请求 `R16G16B16A16_FLOAT`（HDR），
-  失败时退回 `B8G8R8A8_UNORM`；
+- 捕获后端（自动选择）：
+  - SDR：`IDXGIOutput5::DuplicateOutput1` / legacy `DuplicateOutput`；
+  - HDR：先探测 Duplication 是否返回 `R16G16B16A16_FLOAT`；拿不到则自动切
+    `Windows.Graphics.Capture`（FP16/scRGB）后端；
+  - 可用 `CHROMA_FORCE_WGC=1` 环境变量强制测试 WGC；
 - 显示状态：HDR 开关、DXGI 色彩空间、SDR 白点（nits）、最大亮度、显示器名；
 - 隐藏调试命令：`colorpicker --dump [--x X --y Y]` 输出 JSON（用于自动验证）。
 
@@ -72,13 +75,21 @@ cmake --build build --config Debug
 - **换机复测（第二台 Windows，Qt 6.12.0 mingw_64 + MinGW GCC 15.1 构建）**：
   HDR 仍开启，但 `--dump` 依旧只给 `B8G8R8A8_UNORM`（白色锁死 1.0，打开 HDR 窗口也不变）；
   该机 `DuplicateOutput1` 对**任何**格式列表都返回 `DXGI_ERROR_UNSUPPORTED`，比上面记录的情况更彻底。
-  另发现 `src/main.cpp` 的 `%ws` 是 MSVC 专有格式符，用 MinGW 编译后运行会崩。
-  详见 [`VERIFICATION.md`](VERIFICATION.md) §5。
+  已确定必须启用 WGC 备用方案。
+- **WGC 后端（2026-11-19 实现）**：MSVC 构建启用；HDR 屏自动优先使用 WGC FP16，
+  取不到 WGC 时回退 Duplication；MinGW 仍只走 Duplication。
+  `%ws` 已改为标准 `%ls`（MinGW 兼容）。
+  WGC 还没在物理 HDR 控制台验证（本会话 `CreateForMonitor` 返回 `E_ACCESSDENIED`），
+  详见 [`VERIFICATION.md`](VERIFICATION.md) §5/§6。
 
 ## 已知限制
 
-- 本机 Intel UHD 上 HDR 模式下 `DuplicateOutput1` 只返回 BGRA8，HDR 数值不完整；WGC 后端待补；
-- 受保护内容 / 独占全屏 / secure desktop 会导致 `ACCESS_LOST`；\n- Desktop Duplication 刚初始化时可能先返回黑帧，随后桌面更新后恢复；`--dump` 会自动重试；
+- 本机 Intel UHD 上 HDR 模式下 `DuplicateOutput1` 只返回 BGRA8，HDR 数值不完整；
+  WGC 后端已实现（`src/WgcCapture.*`），但需要在本机物理控制台 + HDR 下验证；
+  WGC 仅在 MSVC 构建启用（CMake 自动检测 SDK C++/WinRT）；MinGW 构建保持 Duplication；
+- 某些会话/远程环境会拒绝 `CreateForMonitor`（`E_ACCESSDENIED`），WGC 会回退到 Duplication；
+- 受保护内容 / 独占全屏 / secure desktop 会导致 `ACCESS_LOST`；
+- Desktop Duplication / WGC 刚初始化时可能先返回黑帧，随后桌面更新后恢复；`--dump` 会自动重试；
 - 显示器切换 HDR 开关后，状态最多延迟约 2 秒刷新；
 - 颜色块和放大镜使用 sRGB 近似预览，HDR 值 > 1 会被裁剪，仅作视觉参考。
 

@@ -1,5 +1,7 @@
 #include "Capture.hpp"
 
+#include "WgcCapture.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -135,6 +137,10 @@ std::string colorSpaceToString(DXGI_COLOR_SPACE_TYPE colorSpace)
     }
 }
 
+ScreenCapture::ScreenCapture() = default;
+
+ScreenCapture::~ScreenCapture() = default;
+
 bool ScreenCapture::initialize(HMONITOR monitor)
 {
     release();
@@ -143,11 +149,38 @@ bool ScreenCapture::initialize(HMONITOR monitor)
         release();
         return false;
     }
+
+    m_backend = Backend::Duplication;
+    char wgcFlag[8] = {};
+    const bool forceWgc = GetEnvironmentVariableA("CHROMA_FORCE_WGC", wgcFlag,
+                                                  sizeof(wgcFlag)) > 0 &&
+                          wgcFlag[0] != '0';
+    if (m_display.hdr || forceWgc) {
+        // HDR 输出：先看 Duplication 是否真的能给出 FP16；给不出就切 WGC。
+        bool duplicationHasFp16 = captureFrame() &&
+                                  m_frameFormat == DXGI_FORMAT_R16G16B16A16_FLOAT;
+        if (!duplicationHasFp16) {
+            auto wgc = std::make_unique<WgcCapture>();
+            if (wgc->initialize(monitor)) {
+                m_wgc = std::move(wgc);
+                m_backend = Backend::Wgc;
+                m_hasFrame = false;
+            }
+            else {
+                std::fprintf(stderr, "[capture] WGC 初始化失败，回退 Duplication（HDR 数值可能被截断）\n");
+            }
+        }
+    }
     return true;
 }
 
 void ScreenCapture::release()
 {
+    if (m_wgc) {
+        m_wgc->close();
+        m_wgc.reset();
+    }
+    m_backend = Backend::Duplication;
     m_duplication.Reset();
     m_copyTexture.Reset();
     m_output6.Reset();
@@ -322,6 +355,9 @@ void ScreenCapture::refreshDisplayState()
 
 bool ScreenCapture::captureFrame()
 {
+    if (m_backend == Backend::Wgc && m_wgc) {
+        return m_wgc->captureFrame();
+    }
     if (!m_duplication) {
         return false;
     }
@@ -365,6 +401,31 @@ bool ScreenCapture::captureFrame()
 ScreenCapture::Sample ScreenCapture::sampleRect(int x, int y, int width, int height)
 {
     Sample sample;
+
+    if (m_backend == Backend::Wgc && m_wgc) {
+        const int rectWidth = m_desktopRect.right - m_desktopRect.left;
+        const int rectHeight = m_desktopRect.bottom - m_desktopRect.top;
+        const double scaleX = rectWidth > 0
+                                  ? static_cast<double>(m_wgc->width()) / rectWidth
+                                  : 1.0;
+        const double scaleY = rectHeight > 0
+                                  ? static_cast<double>(m_wgc->height()) / rectHeight
+                                  : 1.0;
+        WgcCapture::Sample wgcSample = m_wgc->sampleRect(
+            static_cast<int>(std::lround(x * scaleX)),
+            static_cast<int>(std::lround(y * scaleY)),
+            std::max(1, static_cast<int>(std::lround(width * scaleX))),
+            std::max(1, static_cast<int>(std::lround(height * scaleY))));
+        sample.ok = wgcSample.ok;
+        sample.format = wgcSample.format;
+        sample.x = wgcSample.x;
+        sample.y = wgcSample.y;
+        sample.width = wgcSample.width;
+        sample.height = wgcSample.height;
+        sample.rgba = std::move(wgcSample.rgba);
+        return sample;
+    }
+
     if (!m_hasFrame || !m_copyTexture || m_device == nullptr || m_context == nullptr) {
         return sample;
     }
@@ -517,5 +578,35 @@ void ScreenCapture::queryDisplayState(HMONITOR monitor)
         }
         break;
     }
+}
+
+DXGI_FORMAT ScreenCapture::frameFormat() const
+{
+    if (m_backend == Backend::Wgc && m_wgc) {
+        return m_wgc->frameFormat();
+    }
+    return m_frameFormat;
+}
+
+int ScreenCapture::width() const
+{
+    if (m_backend == Backend::Wgc && m_wgc) {
+        return m_wgc->width();
+    }
+    return m_width;
+}
+
+int ScreenCapture::height() const
+{
+    if (m_backend == Backend::Wgc && m_wgc) {
+        return m_wgc->height();
+    }
+    return m_height;
+}
+
+const char *ScreenCapture::backendName() const
+{
+    return m_backend == Backend::Wgc ? "WGC (Windows.Graphics.Capture FP16)"
+                                     : "Duplication (DXGI)";
 }
 } // namespace cp

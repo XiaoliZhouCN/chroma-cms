@@ -14,7 +14,9 @@ add_executable(colorpicker
     src/MainWindow.cpp
     src/MainWindow.hpp
     src/Capture.cpp
-    src/Capture.hpp)
+    src/Capture.hpp
+    src/WgcCapture.cpp
+    src/WgcCapture.hpp)
 
 target_link_libraries(colorpicker PRIVATE
     Qt6::Widgets
@@ -22,6 +24,23 @@ target_link_libraries(colorpicker PRIVATE
     dxgi
     user32
     gdi32)
+
+# WGC（Windows.Graphics.Capture）依赖 Windows SDK 自带的 C++/WinRT 头；
+# 仅 MSVC 构建启用；MinGW 构建保持 Duplication 后端。
+if(MSVC)
+    file(GLOB _chroma_cppwinrt_dirs
+        "C:/Program Files (x86)/Windows Kits/10/Include/*/cppwinrt")
+    if(_chroma_cppwinrt_dirs)
+        list(SORT _chroma_cppwinrt_dirs)
+        list(GET _chroma_cppwinrt_dirs -1 _chroma_cppwinrt_dir)
+        if(EXISTS "${_chroma_cppwinrt_dir}/winrt/Windows.Graphics.Capture.h")
+            target_include_directories(colorpicker PRIVATE "${_chroma_cppwinrt_dir}")
+            target_compile_definitions(colorpicker PRIVATE CHROMA_HAS_WGC=1)
+            target_link_libraries(colorpicker PRIVATE windowsapp)
+            message(STATUS "colorpicker: WGC enabled (${_chroma_cppwinrt_dir})")
+        endif()
+    endif()
+endif()
 
 target_compile_definitions(colorpicker PRIVATE
     NOMINMAX

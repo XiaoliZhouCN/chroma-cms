@@ -62,14 +62,15 @@ int runList()
             capture.captureFrame();
         }
         const cp::DisplayState &display = capture.display();
-        std::printf("monitor=%ws rect=(%ld,%ld)-(%ld,%ld) init=%s format=%s hdr=%s "
+        std::printf("monitor=%ls rect=(%ld,%ld)-(%ld,%ld) init=%s backend=%s format=%s hdr=%s "
                     "color_space=%s advanced_supported=%s advanced_enabled=%s "
                     "wide_enforced=%s force_disabled=%s encoding=%s cfg_bits=%u "
-                    "desc1_bits=%u sdr_white=%.1f max_lum=%.1f name=%ws adapter=%ws\n",
+                    "desc1_bits=%u sdr_white=%.1f max_lum=%.1f name=%ls adapter=%ls\n",
                     monitor.gdiName.c_str(),
                     static_cast<long>(monitor.rect.left), static_cast<long>(monitor.rect.top),
                     static_cast<long>(monitor.rect.right), static_cast<long>(monitor.rect.bottom),
                     ok ? "ok" : "fail",
+                    capture.backendName(),
                     cp::formatToString(capture.frameFormat()).c_str(),
                     display.hdr ? "on" : "off",
                     cp::colorSpaceToString(display.colorSpace).c_str(),
@@ -101,7 +102,7 @@ int runDump(const Options &options)
     const cp::MonitorInfo monitor = cp::monitorFromPoint(cursor);
     cp::ScreenCapture capture;
     if (!capture.initialize(monitor.handle)) {
-        std::fprintf(stderr, "捕获初始化失败（monitor=%ws）\n", monitor.gdiName.c_str());
+        std::fprintf(stderr, "捕获初始化失败（monitor=%ls）\n", monitor.gdiName.c_str());
         return 1;
     }
     capture.captureFrame();
@@ -125,6 +126,7 @@ int runDump(const Options &options)
 
     const cp::DisplayState &display = capture.display();
     std::printf("{\n");
+    std::printf("  \"backend\": \"%s\",\n", capture.backendName());
     std::printf("  \"capture_format\": \"%s\",\n",
                 cp::formatToString(sample.format).c_str());
     std::printf("  \"hdr\": %s,\n", display.hdr ? "true" : "false");
@@ -143,11 +145,11 @@ int runDump(const Options &options)
     std::printf("  \"config_bits_per_color\": %u,\n", display.configBitsPerColor);
     std::printf("  \"remote_session\": %s,\n",
                 GetSystemMetrics(SM_REMOTESESSION) != 0 ? "true" : "false");
-    std::printf("  \"adapter\": \"%ws\",\n", display.adapterName.c_str());
+    std::printf("  \"adapter\": \"%ls\",\n", display.adapterName.c_str());
     std::printf("  \"sdr_white_nits\": %.1f,\n", display.sdrWhiteNits);
     std::printf("  \"max_luminance_nits\": %.1f,\n", display.maxLuminance);
     std::printf("  \"bits_per_color\": %u,\n", display.bitsPerColor);
-    std::printf("  \"monitor\": \"%ws\",\n", display.gdiName.c_str());
+    std::printf("  \"monitor\": \"%ls\",\n", display.gdiName.c_str());
     std::printf("  \"screen_x\": %ld,\n", static_cast<long>(cursor.x));
     std::printf("  \"screen_y\": %ld,\n", static_cast<long>(cursor.y));
     std::printf("  \"r\": %.6f,\n", sample.rgba[0]);

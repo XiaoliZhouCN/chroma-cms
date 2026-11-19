@@ -6,11 +6,14 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace cp
 {
+class WgcCapture;
+
 /// 显示器与 Advanced Color 状态（全部来自官方 API）。
 struct DisplayState
 {
@@ -71,6 +74,15 @@ public:
         std::vector<float> rgba; // 顺序 R,G,B,A；FP16 为线性 scRGB，BGRA8 为 0..1 的 sRGB 编码值
     };
 
+    enum class Backend
+    {
+        Duplication,
+        Wgc,
+    };
+
+    ScreenCapture();
+    ~ScreenCapture();
+
     bool initialize(HMONITOR monitor);
     void release();
 
@@ -80,10 +92,12 @@ public:
 
     const DisplayState &display() const { return m_display; }
     bool hdr() const { return m_display.hdr; }
-    DXGI_FORMAT frameFormat() const { return m_frameFormat; }
-    int width() const { return m_width; }
-    int height() const { return m_height; }
+    DXGI_FORMAT frameFormat() const;
+    int width() const;
+    int height() const;
     const RECT &desktopRect() const { return m_desktopRect; }
+    Backend backend() const { return m_backend; }
+    const char *backendName() const;
 
 private:
     bool createDeviceAndDuplication(HMONITOR monitor);
@@ -100,6 +114,9 @@ private:
     Microsoft::WRL::ComPtr<IDXGIOutput6> m_output6;
     Microsoft::WRL::ComPtr<IDXGIOutputDuplication> m_duplication;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> m_copyTexture;
+
+    std::unique_ptr<WgcCapture> m_wgc;
+    Backend m_backend = Backend::Duplication;
 
     HMONITOR m_monitor = nullptr;
     RECT m_desktopRect = {};

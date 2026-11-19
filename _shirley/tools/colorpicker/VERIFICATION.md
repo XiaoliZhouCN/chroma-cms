@@ -309,3 +309,67 @@ sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
 - 命中 §2.3 判定分支 → **Windows HDR 已开，但 Desktop Duplication 不提供 HDR 像素**。
 - 下一步按 §1 的方案补 **`Windows.Graphics.Capture` + `R16G16B16A16_FLOAT`** 后端；
   在后端落地前，本机读数只能当"8-bit 截断值"用，不能用于 HDR 数值判断。
+
+---
+
+## 6. WGC 备用后端实现与验证（2026-11-19）
+
+### 6.1 实现
+
+- 新增 `src/WgcCapture.hpp/.cpp`：`IGraphicsCaptureItemInterop::CreateForMonitor` +
+  `Direct3D11CaptureFramePool::CreateFreeThreaded(..., R16G16B16A16Float, 2, size)` +
+  `GraphicsCaptureSession::StartCapture()`；
+- `ScreenCapture` 自动选择后端：
+  - SDR 输出 → Duplication；
+  - HDR 输出 → 先探测 Duplication 是否能返回 `R16G16B16A16_FLOAT`；不能则用 WGC；
+    WGC 初始化失败则回退 Duplication（HDR 数值会被截断）；
+- 设置 `CHROMA_FORCE_WGC=1` 可在 SDR 下强制测试 WGC 路径；
+- `--list` / `--dump` 增加 `backend` 字段：
+  - `Duplication (DXGI)`；
+  - `WGC (Windows.Graphics.Capture FP16)`；
+- `%ws` 改为标准 `%ls`，修复 MinGW 下启动崩溃；
+- WGC 依赖 Windows SDK 自带 C++/WinRT 头，仅 MSVC 构建启用；MinGW 构建保持 Duplication。
+
+### 6.2 本机测试状态
+
+- 构建：Debug / Release 均通过（MSVC + Qt 6.11.1 + Windows SDK 10.0.28000.0）；
+- 本会话 HDR 当前关闭（`advanced_color_force_disabled=on`），且 WGC 初始化在
+  `CreateForMonitor` 处返回 `E_ACCESSDENIED`（step=7）；工具按设计回退 Duplication；
+- 因此 **WGC 的 HDR 数值尚未在本机验证**，需要在物理 HDR 控制台跑一次。
+
+### 6.3 在物理 HDR 控制台上的验证步骤
+
+1. Windows 设置 → 系统 → 显示 → HDR 显示器 → 打开"使用 HDR"；
+2. 构建 MSVC 版本：
+   ```powershell
+   cmake -S . -B build -G "Visual Studio 18 2026" -A x64 `
+     -DCMAKE_PREFIX_PATH="<Qt6 msvc 路径>"
+   cmake --build build --config Debug
+   ```
+3. 运行：
+   ```powershell
+   .\build\Debug\colorpicker.exe --list
+   .\build\Debug\colorpicker.exe --dump --x <HDR屏内坐标> --y <HDR屏内坐标>
+   ```
+4. 期望：
+   - `--list` 的 HDR 屏 `hdr=on`，`backend=WGC (Windows.Graphics.Capture FP16)`；
+   - `--dump` 的 `capture_format` 为 `R16G16B16A16_FLOAT`；
+   - `--dump` 的 `backend` 为 WGC；
+   - SDR 白点 204 nits 时，白色应读到约 `204/80 = 2.55`（不是 1.0）；
+     1000 nits 的 HDR 测试块应读到约 `12.5`。
+
+如果 `--dump` 仍是 `B8G8R8A8_UNORM` 或 stderr 出现：
+
+```
+[wgc] initialize 失败: step=7 hr=0x80070005
+```
+
+说明当前会话不允许 `CreateForMonitor`（常见于远程/受限会话），请改用本机物理控制台；
+如果物理控制台也失败，把 `verify.ps1` 报告发回来。
+
+### 6.4 已知限制
+
+- WGC 需要 MSVC 构建；MinGW 构建看不到 WGC（会自动走 Duplication）；
+- WGC 首次捕获可能有短暂黑帧/延迟，属于正常现象；
+- 工具使用 `CreateFreeThreaded` + 轮询 `TryGetNextFrame`，未使用事件回调；
+- WGC 数值语义为 scRGB 线性（1.0 = 80 nits），与 Duplication FP16 路径一致。
