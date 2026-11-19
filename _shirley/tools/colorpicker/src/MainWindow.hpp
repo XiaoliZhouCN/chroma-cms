@@ -46,6 +46,7 @@ protected:
 private:
     void tick();
     void initCapture(HMONITOR monitor);
+    bool event(QEvent *event) override;
     void updateReadout(const ScreenCapture::Sample &sample,
                        const ScreenCapture::Sample &magSample, POINT cursor);
     void updateMagnifier(const ScreenCapture::Sample &sample);
@@ -70,6 +71,7 @@ private:
     QVector<QLabel *> m_infoLabels;
 
     bool m_dragging = false;
+    bool m_paused = false;
     QPoint m_dragOffset;
 
     QString m_cccsText;

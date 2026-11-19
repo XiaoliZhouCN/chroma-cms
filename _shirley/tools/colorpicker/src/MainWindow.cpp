@@ -3,6 +3,8 @@
 #include "HdrSwatch.hpp"
 
 #include <QColor>
+#include <QApplication>
+#include <QEvent>
 #include <QFontDatabase>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -196,6 +198,21 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
     auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(escape, &QShortcut::activated, this, &QWidget::close);
 
+    connect(qApp, &QGuiApplication::applicationStateChanged, this,
+            [this](Qt::ApplicationState state) {
+                m_paused = state != Qt::ApplicationActive;
+                if (!m_paused) {
+                    // 从 Windows 设置切回来：SDR 白点/HDR 模式可能已变化。
+                    // 重新初始化捕获，避免 HDR 模式切换后 WGC/Duplication 会话失效。
+                    if (m_monitor != nullptr) {
+                        initCapture(m_monitor);
+                    }
+                    m_capture.refreshDisplayState();
+                    updateInfoLines(m_hasLastSample ? m_lastSample : ScreenCapture::Sample{});
+                    m_swatch->refreshSurface();
+                }
+            });
+
     m_timer = new QTimer(this);
     m_timer->setInterval(50);
     connect(m_timer, &QTimer::timeout, this, &MainWindow::tick);
@@ -231,6 +248,9 @@ void MainWindow::initCapture(HMONITOR monitor)
 
 void MainWindow::tick()
 {
+    if (m_paused) {
+        return;
+    }
     POINT cursor{};
     if (!GetCursorPos(&cursor)) {
         return;
@@ -334,6 +354,16 @@ void MainWindow::updateInfoLines(const ScreenCapture::Sample &sample)
     m_infoLabels[8]->setText(QStringLiteral("Advanced Color：%1")
                                  .arg(display.advancedColorEnabled ? QStringLiteral("已启用")
                                                                   : QStringLiteral("未启用")));
+}
+
+bool MainWindow::event(QEvent *event)
+{
+    if (event->type() == QEvent::ScreenChangeInternal) {
+        if (m_swatch) {
+            m_swatch->refreshSurface();
+        }
+    }
+    return QWidget::event(event);
 }
 
 void MainWindow::mousePressEvent(QMouseEvent *event)

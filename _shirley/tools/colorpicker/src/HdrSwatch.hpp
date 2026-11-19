@@ -20,10 +20,14 @@ public:
     /// linear=true 表示传入 CCCS scRGB 线性值；false 表示 sRGB 编码值（0..1）。
     void setColor(float r, float g, float b, bool linear);
 
+    /// 屏幕/DPI 变化后重新创建 swapchain（原生子窗口与 Qt 布局重新对齐）。
+    void refreshSurface();
+
 protected:
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    bool event(QEvent *event) override;
 
 private:
     bool ensureDevice();

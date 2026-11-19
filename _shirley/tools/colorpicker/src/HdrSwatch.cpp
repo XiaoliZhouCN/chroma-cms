@@ -4,7 +4,9 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QEvent>
 #include <QShowEvent>
+#include <QTimer>
 
 #include <algorithm>
 #include <iterator>
@@ -39,6 +41,13 @@ void HdrSwatch::setColor(float r, float g, float b, bool linear)
     m_g = g;
     m_b = b;
     m_linear = linear;
+    if (!m_swapChainReady && isVisible()) {
+        // 例如显示模式切换导致 device removed，下一帧尝试自动恢复。
+        if (ensureSwapchain()) {
+            present();
+        }
+        return;
+    }
     if (m_swapChainReady) {
         present();
     }
@@ -148,7 +157,37 @@ void HdrSwatch::present()
     }
     const float color[4] = {r, g, b, 1.0f};
     m_context->ClearRenderTargetView(m_rtv.Get(), color);
-    m_swapChain->Present(1, 0);
+    // 不等待垂直同步；HDR 设置切换/跨屏时 Present 可能阻塞 UI 线程。
+    const HRESULT result = m_swapChain->Present(1, DXGI_PRESENT_DO_NOT_WAIT);
+    if (result == DXGI_ERROR_WAS_STILL_DRAWING) {
+        return;
+    }
+    if (result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET) {
+        m_rtv.Reset();
+        m_swapChain.Reset();
+        m_swapChainReady = false;
+        return;
+    }
+}
+
+void HdrSwatch::refreshSurface()
+{
+    m_rtv.Reset();
+    m_swapChain.Reset();
+    m_swapChainReady = false;
+    if (isVisible() && ensureSwapchain()) {
+        present();
+    }
+}
+
+bool HdrSwatch::event(QEvent *event)
+{
+    if (event->type() == QEvent::ScreenChangeInternal) {
+        // Qt 已把原生子窗口移到了新屏幕；下一轮事件循环重建 swapchain，
+        // 避免旧的 scRGB 表面继续以旧尺寸覆盖 UI。
+        QTimer::singleShot(0, this, [this] { refreshSurface(); });
+    }
+    return QWidget::event(event);
 }
 
 void HdrSwatch::showEvent(QShowEvent *event)
