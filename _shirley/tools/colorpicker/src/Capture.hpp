@@ -26,7 +26,8 @@ struct DisplayState
     std::uint32_t configBitsPerColor = 0;
     std::uint32_t bitsPerColor = 0;
     DXGI_COLOR_SPACE_TYPE colorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
-    double sdrWhiteNits = 80.0;       // DISPLAYCONFIG_SDR_WHITE_LEVEL
+    std::uint32_t sdrWhiteLevelRaw = 1000; // DISPLAYCONFIG_SDR_WHITE_LEVEL.SDRWhiteLevel
+    double sdrWhiteNits = 80.0;       // sdrWhiteLevelRaw / 1000 * 80
     double minLuminance = 0.0;
     double maxLuminance = 0.0;
     double maxFullFrameLuminance = 0.0;

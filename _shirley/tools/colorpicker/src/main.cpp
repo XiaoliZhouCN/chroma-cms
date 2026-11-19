@@ -147,6 +147,7 @@ int runDump(const Options &options)
     std::printf("  \"remote_session\": %s,\n",
                 GetSystemMetrics(SM_REMOTESESSION) != 0 ? "true" : "false");
     std::printf("  \"adapter\": \"%ls\",\n", display.adapterName.c_str());
+    std::printf("  \"sdr_white_level\": %u,\n", display.sdrWhiteLevelRaw);
     std::printf("  \"sdr_white_nits\": %.1f,\n", display.sdrWhiteNits);
     std::printf("  \"max_luminance_nits\": %.1f,\n", display.maxLuminance);
     std::printf("  \"bits_per_color\": %u,\n", display.bitsPerColor);

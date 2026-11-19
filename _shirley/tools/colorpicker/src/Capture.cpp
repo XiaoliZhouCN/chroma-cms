@@ -583,6 +583,7 @@ void ScreenCapture::queryDisplayState(HMONITOR monitor)
         whiteLevel.header.adapterId = paths[index].targetInfo.adapterId;
         whiteLevel.header.id = paths[index].targetInfo.id;
         if (DisplayConfigGetDeviceInfo(&whiteLevel.header) == ERROR_SUCCESS) {
+            m_display.sdrWhiteLevelRaw = whiteLevel.SDRWhiteLevel;
             m_display.sdrWhiteNits = whiteLevel.SDRWhiteLevel / 1000.0 * 80.0;
         }
         break;

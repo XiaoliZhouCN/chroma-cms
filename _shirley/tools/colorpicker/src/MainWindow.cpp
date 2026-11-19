@@ -352,14 +352,14 @@ void MainWindow::updateInfoLines(const ScreenCapture::Sample &sample)
     const DXGI_FORMAT format = sample.ok ? sample.format : m_capture.frameFormat();
     const bool isFp16 = format == DXGI_FORMAT_R16G16B16A16_FLOAT;
 
-    const double sliderRaw = std::lround(display.sdrWhiteNits * 1000.0 / 80.0);
+    const std::uint32_t sdrWhiteLevelRaw = display.sdrWhiteLevelRaw;
     const double oneNits = (m_capture.hdr() && isFp16) ? 80.0 : display.sdrWhiteNits;
 
     m_infoLabels[0]->setText(QStringLiteral("捕获格式：%1").arg(formatText(format)));
     m_infoLabels[1]->setText(QStringLiteral("CCCS色域：%1").arg(cccsText(format)));
     m_infoLabels[2]->setText(QStringLiteral("wire format：%1").arg(wireText(display.colorSpace)));
-    m_infoLabels[3]->setText(QStringLiteral("SDR内容亮度滑杆值：%1（SDRWhiteLevel）")
-                                 .arg(static_cast<int>(sliderRaw)));
+    m_infoLabels[3]->setText(QStringLiteral("SDR内容亮度滑杆值：%1（SDRWhiteLevel 原始值）")
+                                 .arg(sdrWhiteLevelRaw));
     m_infoLabels[4]->setText(QStringLiteral("SDR白点：%1 nits")
                                  .arg(QString::number(display.sdrWhiteNits, 'f', 1)));
     m_infoLabels[5]->setText(QStringLiteral("1.0对应实际nits：%1 nits")
