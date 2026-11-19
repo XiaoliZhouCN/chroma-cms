@@ -88,6 +88,8 @@ cmake --build build --config Debug
   WGC 后端已实现（`src/WgcCapture.*`），但需要在本机物理控制台 + HDR 下验证；
   WGC 仅在 MSVC 构建启用（CMake 自动检测 SDK C++/WinRT）；MinGW 构建保持 Duplication；
 - 某些会话/远程环境会拒绝 `CreateForMonitor`（`E_ACCESSDENIED`），WGC 会回退到 Duplication；
+  WGC 依赖 Windows 的 `CaptureService`，若该服务被停止/禁用，需要管理员启动：
+  `Start-Service CaptureService`；
 - 受保护内容 / 独占全屏 / secure desktop 会导致 `ACCESS_LOST`；
 - Desktop Duplication / WGC 刚初始化时可能先返回黑帧，随后桌面更新后恢复；`--dump` 会自动重试；
 - 显示器切换 HDR 开关后，状态最多延迟约 2 秒刷新；

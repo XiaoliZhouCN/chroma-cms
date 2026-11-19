@@ -43,6 +43,11 @@ $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
 Add-Line ("ProductName = " + $cv.ProductName)
 Add-Line ("Build = " + $cv.CurrentBuild + "." + $cv.UBR)
 Add-Line ("DisplayVersion = " + $cv.DisplayVersion)
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+Add-Line ("IsAdmin = " + $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
+Get-Service -Name 'CaptureService*' -ErrorAction SilentlyContinue | ForEach-Object {
+    Add-Line ("Service: " + $_.Name + " status=" + $_.Status + " start=" + $_.StartType)
+}
 
 Add-Section '2. GPU / current display mode'
 Get-CimInstance Win32_VideoController | ForEach-Object {

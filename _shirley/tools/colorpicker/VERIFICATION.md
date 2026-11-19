@@ -333,9 +333,26 @@ sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
 ### 6.2 本机测试状态
 
 - 构建：Debug / Release 均通过（MSVC + Qt 6.11.1 + Windows SDK 10.0.28000.0）；
-- 本会话 HDR 当前关闭（`advanced_color_force_disabled=on`），且 WGC 初始化在
+- 本会话 HDR 当前开启（`--dump` 显示 `hdr=true`），但 WGC 初始化在
   `CreateForMonitor` 处返回 `E_ACCESSDENIED`（step=7）；工具按设计回退 Duplication；
-- 因此 **WGC 的 HDR 数值尚未在本机验证**，需要在物理 HDR 控制台跑一次。
+- **已定位到关键环境因素**：Windows 11 的 `CaptureService`（"Enables optional screen
+  capture functionality for applications that call Windows.Graphics.Capture"）在本机为
+  `Stopped`，且普通用户没有启动权限（服务 DACL 只给 Administrators 启动权）；
+  WGC 会因该服务不可用而返回 `E_ACCESSDENIED`；
+- 以**管理员** PowerShell 启动服务后重试：
+
+  ```powershell
+  Start-Service CaptureService
+  Get-Service CaptureService     # 应为 Running
+  ```
+
+  也可以把启动类型改为自动（需管理员）：
+
+  ```powershell
+  Set-Service CaptureService -StartupType Automatic
+  ```
+
+- 因此 **WGC 的 HDR 数值尚未验证**，需要在物理 HDR 控制台、且 `CaptureService` 运行的状态下跑一次。
 
 ### 6.3 在物理 HDR 控制台上的验证步骤
 
@@ -367,7 +384,21 @@ sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
 说明当前会话不允许 `CreateForMonitor`（常见于远程/受限会话），请改用本机物理控制台；
 如果物理控制台也失败，把 `verify.ps1` 报告发回来。
 
-### 6.4 已知限制
+### 6.4 `CreateForMonitor` 返回 `E_ACCESSDENIED` 时
+
+按顺序排查：
+
+1. `CaptureService` 是否为 `Running`（管理员启动，见 §6.2）；
+2. 是否在**物理控制台**而不是远程/Virtual Desktop 会话；
+3. 尝试用管理员权限运行 `colorpicker.exe`（部分安全策略下非提权进程会被拒绝）；
+4. 用 Windows 自带的 `Win+Shift+S`（截图工具）验证系统捕获栈是否正常：
+   如果系统截图也失败，说明是系统/策略问题，不是工具问题；
+5. 若 `CaptureService` 无法启动，检查：
+   - `sc.exe qc CaptureService`（应为 DEMAND_START）；
+   - 事件查看器 → Windows 日志 → 系统，找 `CaptureService` 相关错误；
+   - 安全软件/组策略/精简版系统镜像是否移除了 `CaptureService.dll`。
+
+### 6.5 已知限制
 
 - WGC 需要 MSVC 构建；MinGW 构建看不到 WGC（会自动走 Duplication）；
 - WGC 首次捕获可能有短暂黑帧/延迟，属于正常现象；
