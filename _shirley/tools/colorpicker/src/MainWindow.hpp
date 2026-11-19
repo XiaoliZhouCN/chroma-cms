@@ -46,6 +46,7 @@ protected:
 private:
     void tick();
     void initCapture(HMONITOR monitor);
+    void refreshMetadata();
     bool event(QEvent *event) override;
     void updateReadout(const ScreenCapture::Sample &sample,
                        const ScreenCapture::Sample &magSample, POINT cursor);
@@ -62,6 +63,7 @@ private:
     int m_tickCounter = 0;
 
     QTimer *m_timer = nullptr;
+    QTimer *m_infoTimer = nullptr;
     MagnifierWidget *m_magnifier = nullptr;
     HdrSwatch *m_swatch = nullptr;
     QLabel *m_cccsLabel = nullptr;

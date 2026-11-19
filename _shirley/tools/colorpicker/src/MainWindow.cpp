@@ -218,6 +218,13 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
     connect(m_timer, &QTimer::timeout, this, &MainWindow::tick);
     m_timer->start();
 
+    // 独立于采集：拖动 Windows HDR "SDR 内容亮度"滑杆时工具是 inactive，
+    // 采集会暂停，但显示元数据仍需刷新（WM_SETTINGCHANGE / ImmersiveColorSet）。
+    m_infoTimer = new QTimer(this);
+    m_infoTimer->setInterval(500);
+    connect(m_infoTimer, &QTimer::timeout, this, &MainWindow::refreshMetadata);
+    m_infoTimer->start();
+
     tick();
 }
 
@@ -244,6 +251,15 @@ void MainWindow::initCapture(HMONITOR monitor)
         return;
     }
     updateInfoLines(ScreenCapture::Sample{});
+}
+
+void MainWindow::refreshMetadata()
+{
+    if (!m_captureReady) {
+        return;
+    }
+    m_capture.refreshDisplayState();
+    updateInfoLines(m_hasLastSample ? m_lastSample : ScreenCapture::Sample{});
 }
 
 void MainWindow::tick()
