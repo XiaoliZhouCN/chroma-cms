@@ -196,3 +196,116 @@ monitor=\\.\DISPLAY1 rect=(2400,-300)-(5600,1500) init=ok format=DXGI_FORMAT_0 h
 - 内屏 BOE 1920×1200 在本机 dxdiag 中是 `HDR Not Supported`，不要拿它做 HDR 测试。
 - 换机后如果两块屏的编号/坐标不同，以 `--list` 的 `rect=` 为准；`--dump` 的 `--x/--y` 是虚拟桌面物理坐标，可为负数。
 - 工具只读取 framebuffer 合成后的数值，不测量面板物理亮度；没有硬件校色仪时，验证结论只能到"合成链路数值是否一致"。
+
+---
+
+## 5. 换机复测记录（2026-11-19，第二台 Windows 机器）
+
+> **结论：HDR 仍拿不到。** Windows HDR 已开启，但 `--dump` 只能拿到 `B8G8R8A8_UNORM`（8-bit），
+> 白色锁死在 1.0。命中 §2.3 的判定分支：**需要 WGC 后端**。
+
+### 5.1 复测环境（与 §1 基线不同）
+
+| 项 | §1 基线 | 本次复测机 |
+|---|---|---|
+| OS | Windows 10 Pro build 26300.9974 | 相同（build 26300.9974，26H2） |
+| 会话 | `Console` | `Console`（`TerminalServerSession=False`） |
+| GPU | Intel UHD Graphics，驱动 31.0.101.4502 | **Intel UHD Graphics 770**，驱动 **32.0.101.7088** |
+| 当前模式 | 2560×1440 @ 59Hz | 2560×1440 @ **144Hz** |
+| 输出名 | `\\.\DISPLAY1` | **`\\.\DISPLAY5`**，rect `(0,0)-(2560,1440)` |
+| 显示器 | AUS VG32AQL1A | 相同（`name=VG32AQL1A`，DisplayPort External） |
+| 其它适配器 | — | NVIDIA RTX 3060（未接显示器）、Microsoft Basic Render Driver |
+
+dxdiag 与工具读数一致：`HDR Support: Supported`、
+`Display Color Space: DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020`、
+`Advanced Color: AdvancedColorSupported AdvancedColorEnabled`、
+`Active Color Mode: DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR`。
+
+### 5.2 构建（该机没有 MSVC，改用 MinGW）
+
+复测机没装 Visual Studio，只能用 Qt 安装器自带的 MinGW 套件：
+
+| 组件 | 版本 |
+|---|---|
+| Qt | 6.12.0 `mingw_64`（`mkspecs/qconfig.pri` 标明由 GCC 15.1.0 编译） |
+| 编译器 | MinGW-w64 GCC **15.1.0**（`<Qt>/Tools/mingw1510_64`，必须与 Qt 的 GCC 版本一致） |
+| CMake | 3.30.5（`<Qt>/Tools/CMake_64`） |
+| 生成器 | `MinGW Makefiles` |
+
+```powershell
+cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug `
+  -DCMAKE_PREFIX_PATH="<Qt>/6.12.0/mingw_64" `
+  -DCMAKE_CXX_COMPILER="<Qt>/Tools/mingw1510_64/bin/g++.exe" `
+  -DCMAKE_MAKE_PROGRAM="<Qt>/Tools/mingw1510_64/bin/mingw32-make.exe"
+cmake --build build
+```
+
+构建时额外踩到两个坑（详见 §5.5）：`%ws` 格式符崩溃、`AUTOMOC` 在受限环境下失败。
+
+### 5.3 实测结果
+
+`--list`（`format=` 字段取自打开 HDR 窗口**之前**的 6 次运行，均为 FP16；打开之后再测 10 次变成
+`DXGI_FORMAT_0`，属 §4 记录的首帧超时现象，HDR 状态判断不受影响）：
+
+```text
+monitor=\\.\DISPLAY5 rect=(0,0)-(2560,1440) init=ok format=R16G16B16A16_FLOAT hdr=on
+color_space=RGB_FULL_G2084_NONE_P2020 (HDR10/PQ) advanced_supported=on advanced_enabled=on
+wide_enforced=off force_disabled=off encoding=RGB cfg_bits=8 desc1_bits=8
+sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
+```
+
+> **待查**：`--list` 的 `format=` 报过 FP16（6/6），而 `--dump` 始终报 BGRA8（20+ 次）。
+> 两者读的都是纹理的 `GetDesc().Format`，差别只在"取到第几帧"，怀疑复制建立后的**首帧**
+> 可能是 FP16(scRGB)、后续帧回落 BGRA8。这是推测，需要给工具加逐帧诊断输出才能确认。
+> 对结论没有影响：`--dump`（实际测量路径）稳定拿不到 HDR 值。
+
+`--dump`（5×4 网格 20 点 + 白点重复 5 次，**全部一致**）：
+
+```json
+{ "capture_format": "B8G8R8A8_UNORM", "hdr": true, "max_luminance_nits": 603.7 }
+```
+
+典型读数（全是 `n/255` 的精确值，说明走的是 8-bit 分支）：
+
+| 坐标 | `capture_format` | r / g / b |
+|---|---|---|
+| (1280, 200) | `B8G8R8A8_UNORM` | 1.000000 / 1.000000 / 1.000000 |
+| (1280, 600) | `B8G8R8A8_UNORM` | 0.000000 / 1.000000 / 0.000000 |
+| (1280, 1000) | `B8G8R8A8_UNORM` | 1.000000 / 1.000000 / 0.000000 |
+| (200, 200) | `B8G8R8A8_UNORM` | 0.105882（= 27/255）×3 |
+
+**打开 HDR 窗口后再测，格式没有变化**（再测 25 次全部 BGRA8，白色仍锁在 1.0）。
+桌面复制的格式在建立 duplication 时协商，不随屏幕内容改变；
+若走 FP16/scRGB，1000 nits 的白应读到约 `1000/80 = 12.5`，而不是 1.0。
+
+### 5.4 与 §1 已知问题的差异：`DuplicateOutput1` 直接不可用
+
+§1 记录的是「`DuplicateOutput1` 仍返回 `B8G8R8A8_UNORM`」。本机更彻底：
+
+| 调用 | 结果 |
+|---|---|
+| `IDXGIOutput5::DuplicateOutput1([FP16, BGRA8])` | `DXGI_ERROR_UNSUPPORTED (0x887A0004)` |
+| `IDXGIOutput5::DuplicateOutput1([BGRA8])` | `DXGI_ERROR_UNSUPPORTED` |
+| `IDXGIOutput5::DuplicateOutput1([FP16])` | `DXGI_ERROR_UNSUPPORTED` |
+| `IDXGIOutput1::DuplicateOutput` | `S_OK`，表面为 `B8G8R8A8_UNORM` |
+
+即这颗驱动连「只请求 BGRA8」的格式列表都拒绝，工具必然落到 `recreateDuplication()` 的
+`DuplicateOutput` 回退分支，`--dump` 的结果就是 8-bit 截断值。
+
+### 5.5 新踩的坑
+
+| 症状 | 原因 | 处置 |
+|---|---|---|
+| 启动即 `0xC0000005`；gdb 栈落在 `printf → __mingw_pformat → strlen` | `main.cpp` 用了 `%ws`（MSVC 专有格式符）。标准 C 的宽字符串是 `%ls`；MinGW 把 `%ws` 当 `%s`，于是对 `wchar_t*` 调 `strlen` | 改成 `%ls`（MSVC 同样支持），共 6 处、分布在 5 行：`main.cpp:65/68/104/146/150` |
+| `AUTOMOC` 报 `libuv process spawn failed: operation not permitted` | CMake 的 AUTOMOC 走 libuv 进程链，需要命名管道；受限环境（沙箱）禁止 | 普通终端无此问题；受限环境下手工跑 `moc MainWindow.hpp` 并把生成的 `.cpp` 加入源列表 |
+| 用 `DXGI_OUTDUPL_DESC.ModeDesc.Format` 判断捕获格式，会误报 `R16G16B16A16_FLOAT` | `ModeDesc` 描述的是**输出模式**，不是复制表面的像素格式 | 判断捕获格式必须读纹理的 `GetDesc().Format`（工具现有实现是对的） |
+| 自编译的 exe 被拒绝运行 | 该机启用了 **Smart App Control**（强制模式），未签名 exe 一律拦截；事件 `Microsoft-Windows-CodeIntegrity/Operational` ID 3077/3033/3118 | 关闭 Smart App Control，或使用正规 CA 签名的证书；**自签名无效**（要求证书链在 Microsoft Trusted Root Program 内） |
+| Qt 运行时缺失导致 exe 直接退出 | 只拷了 exe | 用 `windeployqt`，或手工拷 `Qt6Core/Gui/Widgets.dll` + `platforms\qwindows.dll` + MinGW 运行时（`libstdc++-6`、`libgcc_s_seh-1`、`libwinpthread-1`） |
+
+### 5.6 结论与下一步
+
+- 本机 **不满足** §2.3 的全部验收标准：`--list` 的 `hdr=on`、`color_space`、`max_lum` 三项成立，
+  dxdiag 也成立，但 `--dump` 的 `capture_format` 只能是 `B8G8R8A8_UNORM`。
+- 命中 §2.3 判定分支 → **Windows HDR 已开，但 Desktop Duplication 不提供 HDR 像素**。
+- 下一步按 §1 的方案补 **`Windows.Graphics.Capture` + `R16G16B16A16_FLOAT`** 后端；
+  在后端落地前，本机读数只能当"8-bit 截断值"用，不能用于 HDR 数值判断。

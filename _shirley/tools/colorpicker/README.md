@@ -68,7 +68,12 @@ cmake --build build --config Debug
   仍返回 `B8G8R8A8_UNORM`，HDR 数值被截断（白色读到 1.0）。下一步补
   `Windows.Graphics.Capture` FP16 后端。
 - 已知纯红窗口测试：`--dump` 返回 `r=1.0 g=0.0 b=0.0`，与 GDI 读数一致；
-- 内屏 BOE 1920×1200 经 dxdiag 确认 `HDR Not Supported`，不是 HDR 屏。
+- 内屏 BOE 1920×1200 经 dxdiag 确认 `HDR Not Supported`，不是 HDR 屏；
+- **换机复测（第二台 Windows，Qt 6.12.0 mingw_64 + MinGW GCC 15.1 构建）**：
+  HDR 仍开启，但 `--dump` 依旧只给 `B8G8R8A8_UNORM`（白色锁死 1.0，打开 HDR 窗口也不变）；
+  该机 `DuplicateOutput1` 对**任何**格式列表都返回 `DXGI_ERROR_UNSUPPORTED`，比上面记录的情况更彻底。
+  另发现 `src/main.cpp` 的 `%ws` 是 MSVC 专有格式符，用 MinGW 编译后运行会崩。
+  详见 [`VERIFICATION.md`](VERIFICATION.md) §5。
 
 ## 已知限制
 
