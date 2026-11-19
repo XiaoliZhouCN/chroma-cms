@@ -1,15 +1,20 @@
 #include "MainWindow.hpp"
 
+#include "HdrSwatch.hpp"
+
 #include <QColor>
 #include <QFontDatabase>
 #include <QGridLayout>
-#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QKeySequence>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QPolygon>
+#include <QShortcut>
 #include <QTimer>
-
+#include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
@@ -33,23 +38,48 @@ QColor previewColor(float r, float g, float b, DXGI_FORMAT format)
                             std::clamp(b, 0.0f, 1.0f));
 }
 
-QString formatLabelText(DXGI_FORMAT format)
+QString formatText(DXGI_FORMAT format)
 {
     if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
-        return QStringLiteral("捕获格式：R16G16B16A16_FLOAT（scRGB 线性，1.0 = 80 nits）");
+        return QStringLiteral("R16G16B16A16_FLOAT");
     }
     if (format == DXGI_FORMAT_B8G8R8A8_UNORM) {
-        return QStringLiteral("捕获格式：B8G8R8A8_UNORM（sRGB 8-bit）");
+        return QStringLiteral("B8G8R8A8_UNORM");
     }
-    return QStringLiteral("捕获格式：%1").arg(QString::fromStdString(formatToString(format)));
+    return QString::fromStdString(formatToString(format));
 }
 
+QString cccsText(DXGI_FORMAT format)
+{
+    if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+        return QStringLiteral("scRGB（BT.709，线性）");
+    }
+    return QStringLiteral("sRGB（BT.709，非线性）");
+}
+
+QString wireText(DXGI_COLOR_SPACE_TYPE colorSpace)
+{
+    switch (colorSpace) {
+    case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
+        return QStringLiteral("BT.2020 + PQ（ST.2084）");
+    case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
+        return QStringLiteral("BT.709 + gamma 2.2（sRGB）");
+    case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
+        return QStringLiteral("BT.709 + 线性（scRGB）");
+    default:
+        return QString::fromStdString(colorSpaceToString(colorSpace));
+    }
+}
+
+void makeDraggableLabel(QLabel *label)
+{
+    label->setAttribute(Qt::WA_TransparentForMouseEvents);
+}
 } // namespace
 
 MagnifierWidget::MagnifierWidget(QWidget *parent) : QWidget(parent)
 {
-    setMinimumSize(100, 80);
-    setMaximumSize(100, 80);
+    setFixedSize(160, 160);
 }
 
 void MagnifierWidget::setImage(const QImage &image)
@@ -64,17 +94,15 @@ void MagnifierWidget::paintEvent(QPaintEvent *)
     painter.fillRect(rect(), QColor(16, 16, 20));
 
     if (m_image.isNull()) {
-        painter.setPen(QColor(160, 160, 160));
+        painter.setPen(QColor(150, 150, 150));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("等待捕获…"));
         return;
     }
 
-    const QImage scaled =
-        m_image.scaled(size(), Qt::KeepAspectRatio, Qt::FastTransformation);
+    const QImage scaled = m_image.scaled(size(), Qt::KeepAspectRatio, Qt::FastTransformation);
     const QPoint origin((width() - scaled.width()) / 2, (height() - scaled.height()) / 2);
     painter.drawImage(origin, scaled);
 
-    // 16× 像素网格
     if (m_image.width() > 0 && m_image.height() > 0) {
         const qreal cellW = static_cast<qreal>(scaled.width()) / m_image.width();
         const qreal cellH = static_cast<qreal>(scaled.height()) / m_image.height();
@@ -92,82 +120,81 @@ void MagnifierWidget::paintEvent(QPaintEvent *)
     painter.setPen(QPen(QColor(240, 80, 80), 1));
     const int centerX = origin.x() + scaled.width() / 2;
     const int centerY = origin.y() + scaled.height() / 2;
-    painter.drawLine(centerX - 4, centerY, centerX + 4, centerY);
-    painter.drawLine(centerX, centerY - 4, centerX, centerY + 4);
-}
-
-SwatchWidget::SwatchWidget(QWidget *parent) : QWidget(parent)
-{
-    setMinimumSize(50, 50);
-    setMaximumSize(50, 50);
-}
-
-void SwatchWidget::setColor(const QColor &color)
-{
-    m_color = color;
-    update();
-}
-
-void SwatchWidget::paintEvent(QPaintEvent *)
-{
-    QPainter painter(this);
-    painter.fillRect(rect(), m_color);
-    painter.setPen(QPen(QColor(220, 220, 220), 2));
-    painter.drawRect(rect().adjusted(1, 1, -2, -2));
+    painter.drawLine(centerX - 5, centerY, centerX + 5, centerY);
+    painter.drawLine(centerX, centerY - 5, centerX, centerY + 5);
 }
 
 MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
 {
-    setWindowTitle(QStringLiteral("Chroma ColorPicker — HDR raw（1×1）"));
-    setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
-    setMinimumSize(560, 320);
-    resize(580, 340);
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    setAttribute(Qt::WA_TranslucentBackground, false);
+    setStyleSheet(QStringLiteral("QWidget { background-color: #151517; color: #e8e8e8; }"));
+    setFixedSize(560, 460);
+    setFocusPolicy(Qt::StrongFocus);
 
-    setStyleSheet(QStringLiteral("QWidget { background-color: #1e1e22; color: #e8e8e8; }"));
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(10, 10, 10, 10);
-    root->setSpacing(6);
+    root->setContentsMargins(12, 12, 12, 12);
+    root->setSpacing(8);
+
+    auto *top = new QHBoxLayout();
+    top->setSpacing(10);
 
     m_magnifier = new MagnifierWidget(this);
-    m_swatch = new SwatchWidget(this);
+    m_magnifier->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+    m_swatch = new HdrSwatch(this);
+    m_swatch->setFixedSize(120, 120);
 
     const QFont fixedFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    const auto createValueLabel = [&](const QString &name) {
-        auto *label = new QLabel(QStringLiteral("%1 = …").arg(name), this);
+    auto *right = new QVBoxLayout();
+    right->setSpacing(6);
+    m_cccsLabel = new QLabel(QStringLiteral("CCCS：—"), this);
+    m_cccsLabel->setFont(fixedFont);
+    m_cccsLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
+    makeDraggableLabel(m_cccsLabel);
+    right->addWidget(m_cccsLabel);
+
+    const auto makeValueLabel = [&](const QString &name) {
+        auto *label = new QLabel(QStringLiteral("%1 = —").arg(name), this);
         label->setFont(fixedFont);
+        label->setStyleSheet(QStringLiteral("font-size: 14px;"));
+        label->setFixedHeight(26);
+        makeDraggableLabel(label);
         return label;
     };
-    m_rLabel = createValueLabel(QStringLiteral("R"));
-    m_gLabel = createValueLabel(QStringLiteral("G"));
-    m_bLabel = createValueLabel(QStringLiteral("B"));
+    m_rLabel = makeValueLabel(QStringLiteral("R"));
+    m_gLabel = makeValueLabel(QStringLiteral("G"));
+    m_bLabel = makeValueLabel(QStringLiteral("B"));
+    right->addWidget(m_rLabel);
+    right->addWidget(m_gLabel);
+    right->addWidget(m_bLabel);
+    right->addStretch(1);
 
-    m_formatLabel = new QLabel(QStringLiteral("捕获格式：初始化中…"), this);
-    m_formatLabel->setWordWrap(true);
-    m_formatLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    m_warningLabel = new QLabel(this);
-    m_warningLabel->setWordWrap(true);
-    m_warningLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    m_warningLabel->setStyleSheet(QStringLiteral("color: #ff9060;"));
-    m_warningLabel->hide();
-    m_infoLabel = new QLabel(QStringLiteral("显示器状态：初始化中…"), this);
-    m_infoLabel->setWordWrap(true);
-    m_infoLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    top->addWidget(m_magnifier);
+    top->addWidget(m_swatch);
+    top->addLayout(right, 1);
+    root->addLayout(top);
 
-    auto *topGrid = new QGridLayout();
-    topGrid->setHorizontalSpacing(10);
-    topGrid->setVerticalSpacing(4);
-    topGrid->addWidget(m_magnifier, 0, 0, 2, 1, Qt::AlignLeft | Qt::AlignTop);
-    topGrid->addWidget(m_swatch, 0, 1, 2, 1, Qt::AlignLeft | Qt::AlignTop);
-    topGrid->addWidget(m_rLabel, 0, 2);
-    topGrid->addWidget(m_gLabel, 1, 2);
-    topGrid->addWidget(m_bLabel, 2, 2);
-    topGrid->setColumnStretch(2, 1);
+    const QString infoNames[] = {QStringLiteral("捕获格式"),
+                                 QStringLiteral("CCCS色域"),
+                                 QStringLiteral("wire format"),
+                                 QStringLiteral("SDR内容亮度滑杆值"),
+                                 QStringLiteral("SDR白点"),
+                                 QStringLiteral("1.0对应实际nits"),
+                                 QStringLiteral("最大亮度"),
+                                 QStringLiteral("位数"),
+                                 QStringLiteral("Advanced Color")};
+    for (const QString &name : infoNames) {
+        auto *label = new QLabel(QStringLiteral("%1：—").arg(name), this);
+        label->setStyleSheet(QStringLiteral("font-size: 11px; color: #b8b8b8;"));
+        label->setFixedHeight(18);
+        makeDraggableLabel(label);
+        m_infoLabels.push_back(label);
+        root->addWidget(label);
+    }
 
-    root->addLayout(topGrid);
-    root->addWidget(m_formatLabel);
-    root->addWidget(m_warningLabel);
-    root->addWidget(m_infoLabel);
-    root->addStretch(1);
+    auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escape, &QShortcut::activated, this, &QWidget::close);
 
     m_timer = new QTimer(this);
     m_timer->setInterval(50);
@@ -196,14 +223,10 @@ void MainWindow::initCapture(HMONITOR monitor)
     m_captureReady = m_capture.initialize(monitor, reinterpret_cast<HWND>(winId()));
     m_hasLastSample = false;
     if (!m_captureReady) {
-        m_formatLabel->setText(QStringLiteral("捕获初始化失败（HDR/独占全屏/受保护内容？）"));
-        m_infoLabel->setText(QStringLiteral("无法初始化 Desktop Duplication。"));
+        m_infoLabels[0]->setText(QStringLiteral("捕获格式：初始化失败"));
         return;
     }
-
-    m_formatLabel->setText(QStringLiteral("后端：%1　").arg(QString::fromUtf8(m_capture.backendName())) +
-                           formatLabelText(m_capture.frameFormat()));
-    updateDisplayInfo();
+    updateInfoLines(ScreenCapture::Sample{});
 }
 
 void MainWindow::tick()
@@ -216,20 +239,13 @@ void MainWindow::tick()
     if (!m_captureReady) {
         initCapture(monitor);
     }
-    else if (monitor != m_monitor &&
-             m_capture.backend() != ScreenCapture::Backend::Wgc) {
-        // 只有 Duplication 后端才跟随光标切换显示器；WGC 一旦选定就锁定，
-        // 避免离开 HDR 屏时反复弹 picker/重建捕获造成闪烁。
-        std::fprintf(stderr, "[gui] switch monitor: %p -> %p\n",
-                     static_cast<void *>(m_monitor), static_cast<void *>(monitor));
+    else if (monitor != m_monitor && m_capture.backend() != ScreenCapture::Backend::Wgc) {
         initCapture(monitor);
     }
 
     if (!m_captureReady) {
         return;
     }
-
-    // WGC 锁定显示器后，光标离开该显示器时保留上一帧，不切源。
     if (monitor != m_monitor) {
         return;
     }
@@ -240,7 +256,7 @@ void MainWindow::tick()
     const int localY = cursor.y - m_monitorRect.top;
     const ScreenCapture::Sample sample = m_capture.sampleRect(localX, localY, 1, 1);
     const ScreenCapture::Sample magnifierSample =
-        m_capture.sampleRect(localX - 3, localY - 2, 6, 5);
+        m_capture.sampleRect(localX - 8, localY - 8, 16, 16);
 
     if (sample.ok) {
         m_lastSample = sample;
@@ -248,23 +264,12 @@ void MainWindow::tick()
         m_hasLastSample = true;
         updateReadout(sample, magnifierSample, cursor);
     }
-    else if (m_hasLastSample) {
-        // 瞬时没有新帧时保留上一帧读数，避免界面闪烁。
-    }
-    else {
-        m_formatLabel->setText(QStringLiteral("等待捕获帧…"));
-    }
-
-    if (++m_tickCounter % 40 == 0) {
-        m_capture.refreshDisplayState();
-        m_formatLabel->setText(formatLabelText(m_capture.frameFormat()));
-        updateDisplayInfo();
-    }
 }
 
 void MainWindow::updateReadout(const ScreenCapture::Sample &sample,
                                const ScreenCapture::Sample &magSample, POINT cursor)
 {
+    Q_UNUSED(cursor);
     const bool isFp16 = sample.format == DXGI_FORMAT_R16G16B16A16_FLOAT;
     const float r = sample.rgba[0];
     const float g = sample.rgba[1];
@@ -281,25 +286,11 @@ void MainWindow::updateReadout(const ScreenCapture::Sample &sample,
         m_bLabel->setText(QStringLiteral("B = %1").arg(std::lround(b * 255.0f)));
     }
 
-    m_swatch->setColor(previewColor(r, g, b, sample.format));
+    m_cccsText = cccsText(sample.format);
+    m_cccsLabel->setText(QStringLiteral("CCCS：%1").arg(m_cccsText));
+    m_swatch->setColor(r, g, b, isFp16);
     updateMagnifier(magSample);
-
-    const DisplayState &display = m_capture.display();
-    const bool clipped = isFp16 && (r > 1.0f || g > 1.0f || b > 1.0f);
-    m_formatLabel->setText(QStringLiteral("后端：%1　").arg(QString::fromUtf8(m_capture.backendName())) +
-                          formatLabelText(sample.format) +
-                          (clipped ? QStringLiteral("　预览色块已裁剪到 [0,1]") : QString()));
-
-    if (display.hdr && !isFp16) {
-        m_warningLabel->setText(
-            QStringLiteral("HDR 已开启但捕获到 BGRA8：HDR 数值可能被截断（需补 WGC 后端）。"));
-        m_warningLabel->show();
-    }
-    else {
-        m_warningLabel->hide();
-    }
-
-    setWindowTitle(QStringLiteral("Chroma ColorPicker — (%1, %2)").arg(cursor.x).arg(cursor.y));
+    updateInfoLines(sample);
 }
 
 void MainWindow::updateMagnifier(const ScreenCapture::Sample &sample)
@@ -319,22 +310,67 @@ void MainWindow::updateMagnifier(const ScreenCapture::Sample &sample)
     m_magnifier->setImage(image);
 }
 
-void MainWindow::updateDisplayInfo()
+void MainWindow::updateInfoLines(const ScreenCapture::Sample &sample)
 {
     const DisplayState &display = m_capture.display();
-    QString text;
-    text += QStringLiteral("HDR：%1（%2）　SDR 白点：%3 nits\n")
-                .arg(display.hdr ? QStringLiteral("开") : QStringLiteral("关"),
-                     display.hdr ? QStringLiteral("HDR10/PQ") : QStringLiteral("SDR/sRGB"),
-                     QString::number(display.sdrWhiteNits, 'f', 1));
-    text += QStringLiteral("最大亮度：%1 nits　位数：%2 bit　Advanced Color：%3\n")
-                .arg(QString::number(display.maxLuminance, 'f', 0))
-                .arg(display.bitsPerColor)
-                .arg(display.advancedColorEnabled ? QStringLiteral("已启用")
-                                                 : QStringLiteral("未启用"));
-    text += QStringLiteral("显示器：%1（%2）")
-                .arg(QString::fromStdWString(display.friendlyName),
-                     QString::fromStdWString(display.gdiName));
-    m_infoLabel->setText(text);
+    const DXGI_FORMAT format = sample.ok ? sample.format : m_capture.frameFormat();
+    const bool isFp16 = format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+    const double sliderRaw = std::lround(display.sdrWhiteNits * 1000.0 / 80.0);
+    const double oneNits = (m_capture.hdr() && isFp16) ? 80.0 : display.sdrWhiteNits;
+
+    m_infoLabels[0]->setText(QStringLiteral("捕获格式：%1").arg(formatText(format)));
+    m_infoLabels[1]->setText(QStringLiteral("CCCS色域：%1").arg(cccsText(format)));
+    m_infoLabels[2]->setText(QStringLiteral("wire format：%1").arg(wireText(display.colorSpace)));
+    m_infoLabels[3]->setText(QStringLiteral("SDR内容亮度滑杆值：%1（SDRWhiteLevel）")
+                                 .arg(static_cast<int>(sliderRaw)));
+    m_infoLabels[4]->setText(QStringLiteral("SDR白点：%1 nits")
+                                 .arg(QString::number(display.sdrWhiteNits, 'f', 1)));
+    m_infoLabels[5]->setText(QStringLiteral("1.0对应实际nits：%1 nits")
+                                 .arg(QString::number(oneNits, 'f', 1)));
+    m_infoLabels[6]->setText(QStringLiteral("最大亮度：%1 nits")
+                                 .arg(QString::number(display.maxLuminance, 'f', 1)));
+    m_infoLabels[7]->setText(QStringLiteral("位数：%1").arg(display.bitsPerColor));
+    m_infoLabels[8]->setText(QStringLiteral("Advanced Color：%1")
+                                 .arg(display.advancedColorEnabled ? QStringLiteral("已启用")
+                                                                  : QStringLiteral("未启用")));
+}
+
+void MainWindow::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = true;
+        m_dragOffset = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
+
+void MainWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPosition().toPoint() - m_dragOffset);
+        event->accept();
+        return;
+    }
+    QWidget::mouseMoveEvent(event);
+}
+
+void MainWindow::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        close();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 } // namespace cp

@@ -3,6 +3,8 @@
 #include "Capture.hpp"
 
 #include <QImage>
+#include <QPoint>
+#include <QVector>
 #include <QWidget>
 
 #include <memory>
@@ -12,6 +14,8 @@ class QTimer;
 
 namespace cp
 {
+class HdrSwatch;
+
 class MagnifierWidget : public QWidget
 {
 public:
@@ -25,34 +29,27 @@ private:
     QImage m_image;
 };
 
-class SwatchWidget : public QWidget
-{
-public:
-    explicit SwatchWidget(QWidget *parent = nullptr);
-    void setColor(const QColor &color);
-
-protected:
-    void paintEvent(QPaintEvent *event) override;
-
-private:
-    QColor m_color = Qt::black;
-};
-
-/// 简化版"屏幕测色计"：无热键，跟随鼠标连续读取光标下 1×1 像素。
-class MainWindow : public QWidget
+/// 简化版屏幕测色计：无边框、置顶、可拖动，Esc 退出。
+class MainWindow final : public QWidget
 {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+
 private:
     void tick();
     void initCapture(HMONITOR monitor);
     void updateReadout(const ScreenCapture::Sample &sample,
                        const ScreenCapture::Sample &magSample, POINT cursor);
-    void updateDisplayInfo();
     void updateMagnifier(const ScreenCapture::Sample &sample);
+    void updateInfoLines(const ScreenCapture::Sample &sample);
 
     ScreenCapture m_capture;
     bool m_captureReady = false;
@@ -65,12 +62,16 @@ private:
 
     QTimer *m_timer = nullptr;
     MagnifierWidget *m_magnifier = nullptr;
-    SwatchWidget *m_swatch = nullptr;
-    QLabel *m_formatLabel = nullptr;
-    QLabel *m_warningLabel = nullptr;
-    QLabel *m_infoLabel = nullptr;
+    HdrSwatch *m_swatch = nullptr;
+    QLabel *m_cccsLabel = nullptr;
     QLabel *m_rLabel = nullptr;
     QLabel *m_gLabel = nullptr;
     QLabel *m_bLabel = nullptr;
+    QVector<QLabel *> m_infoLabels;
+
+    bool m_dragging = false;
+    QPoint m_dragOffset;
+
+    QString m_cccsText;
 };
 } // namespace cp

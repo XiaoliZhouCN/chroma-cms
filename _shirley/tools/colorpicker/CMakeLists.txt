@@ -16,7 +16,9 @@ add_executable(colorpicker
     src/Capture.cpp
     src/Capture.hpp
     src/WgcCapture.cpp
-    src/WgcCapture.hpp)
+    src/WgcCapture.hpp
+    src/HdrSwatch.cpp
+    src/HdrSwatch.hpp)
 
 target_link_libraries(colorpicker PRIVATE
     Qt6::Widgets
