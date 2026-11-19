@@ -213,10 +213,24 @@ void MainWindow::tick()
         return;
     }
     const HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-    if (monitor != m_monitor || !m_captureReady) {
+    if (!m_captureReady) {
         initCapture(monitor);
     }
+    else if (monitor != m_monitor &&
+             m_capture.backend() != ScreenCapture::Backend::Wgc) {
+        // 只有 Duplication 后端才跟随光标切换显示器；WGC 一旦选定就锁定，
+        // 避免离开 HDR 屏时反复弹 picker/重建捕获造成闪烁。
+        std::fprintf(stderr, "[gui] switch monitor: %p -> %p\n",
+                     static_cast<void *>(m_monitor), static_cast<void *>(monitor));
+        initCapture(monitor);
+    }
+
     if (!m_captureReady) {
+        return;
+    }
+
+    // WGC 锁定显示器后，光标离开该显示器时保留上一帧，不切源。
+    if (monitor != m_monitor) {
         return;
     }
 

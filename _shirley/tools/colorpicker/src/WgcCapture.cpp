@@ -13,6 +13,7 @@
 #include <shobjidl_core.h>
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -102,8 +103,18 @@ bool WgcCapture::initialize(HMONITOR monitor, HWND owner)
         const auto direct3DDevice =
             inspectable.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice>();
 
-        // 1) 首选：programmatic monitor capture（需要系统截图权限）。
+        // 0) 同一显示器本次进程内已选过：复用 GraphicsCaptureItem，避免反复弹 picker。
+        static std::map<HMONITOR, winrt::Windows::Graphics::Capture::GraphicsCaptureItem>
+            cachedItems;
         winrt::Windows::Graphics::Capture::GraphicsCaptureItem item{nullptr};
+        const auto cached = cachedItems.find(monitor);
+        if (cached != cachedItems.end()) {
+            item = cached->second;
+            std::fprintf(stderr, "[wgc] reuse cached capture item for monitor=%p\n",
+                         static_cast<void *>(monitor));
+        }
+
+        // 1) 首选：programmatic monitor capture（需要系统截图权限）。
         try {
             step = 6;
             const auto factory = winrt::get_activation_factory<
@@ -163,6 +174,7 @@ bool WgcCapture::initialize(HMONITOR monitor, HWND owner)
         }
 
         m_impl->item = item;
+        cachedItems.insert_or_assign(monitor, item);
         step = 9;
         const auto size = m_impl->item.Size();
         step = 10;
