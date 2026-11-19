@@ -89,6 +89,7 @@ int runList()
 
 int runDump(const Options &options)
 {
+    SetProcessDPIAware(); // 仅 dump 模式需要物理像素坐标；GUI 由 Qt 管理 DPI
     POINT cursor{};
     if (!GetCursorPos(&cursor)) {
         std::fprintf(stderr, "GetCursorPos 失败\n");
@@ -163,7 +164,6 @@ int runDump(const Options &options)
 
 int main(int argc, char **argv)
 {
-    SetProcessDPIAware(); // 使用物理像素坐标（与 DXGI 捕获尺寸一致）
     Options options;
     if (!parseArgs(argc, argv, options)) {
         return 0;

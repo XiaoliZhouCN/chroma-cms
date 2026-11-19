@@ -230,32 +230,33 @@ bool WgcCapture::captureFrame()
         return false;
     }
     try {
-        auto frame = m_impl->framePool.TryGetNextFrame();
-        if (!frame) {
-            return m_impl->hasFrame;
-        }
-
-        auto surface = frame.Surface();
-        winrt::com_ptr<ID3D11Texture2D> texture;
-        const HRESULT result = winrt::get_unknown(surface)->QueryInterface(
-            IID_PPV_ARGS(texture.put()));
-        if (FAILED(result) || !texture) {
-            frame.Close();
-            return m_impl->hasFrame;
-        }
-
-        D3D11_TEXTURE2D_DESC desc{};
-        texture->GetDesc(&desc);
-        if (m_impl->copyTexture) {
-            D3D11_TEXTURE2D_DESC current{};
-            m_impl->copyTexture->GetDesc(&current);
-            if (current.Format != desc.Format || current.Width != desc.Width ||
-                current.Height != desc.Height) {
-                m_impl->copyTexture = nullptr;
+        // free-threaded frame pool 里可能积压多帧；每次取色前 drain 到最新一帧，
+        // 避免旧帧/空帧导致界面"闪烁等待捕获"。
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            auto frame = m_impl->framePool.TryGetNextFrame();
+            if (!frame) {
+                break;
             }
-        }
-        if (!m_impl->copyTexture) {
-            const D3D11_TEXTURE2D_DESC targetDesc = [&desc] {
+            auto surface = frame.Surface();
+            winrt::com_ptr<ID3D11Texture2D> texture;
+            const HRESULT result = winrt::get_unknown(surface)->QueryInterface(
+                IID_PPV_ARGS(texture.put()));
+            if (FAILED(result) || !texture) {
+                frame.Close();
+                continue;
+            }
+
+            D3D11_TEXTURE2D_DESC desc{};
+            texture->GetDesc(&desc);
+            if (m_impl->copyTexture) {
+                D3D11_TEXTURE2D_DESC current{};
+                m_impl->copyTexture->GetDesc(&current);
+                if (current.Format != desc.Format || current.Width != desc.Width ||
+                    current.Height != desc.Height) {
+                    m_impl->copyTexture = nullptr;
+                }
+            }
+            if (!m_impl->copyTexture) {
                 D3D11_TEXTURE2D_DESC target = desc;
                 target.Usage = D3D11_USAGE_DEFAULT;
                 target.BindFlags = 0;
@@ -265,23 +266,22 @@ bool WgcCapture::captureFrame()
                 target.ArraySize = 1;
                 target.SampleDesc.Count = 1;
                 target.SampleDesc.Quality = 0;
-                return target;
-            }();
-            if (FAILED(m_impl->device->CreateTexture2D(&targetDesc, nullptr,
-                                                       m_impl->copyTexture.put()))) {
-                frame.Close();
-                std::fprintf(stderr, "[wgc] CreateTexture2D(copy) 失败\n");
-                return m_impl->hasFrame;
+                if (FAILED(m_impl->device->CreateTexture2D(&target, nullptr,
+                                                           m_impl->copyTexture.put()))) {
+                    frame.Close();
+                    std::fprintf(stderr, "[wgc] CreateTexture2D(copy) 失败\n");
+                    break;
+                }
             }
-        }
 
-        m_impl->context->CopyResource(m_impl->copyTexture.get(), texture.get());
-        m_impl->format = desc.Format;
-        m_impl->width = static_cast<int>(desc.Width);
-        m_impl->height = static_cast<int>(desc.Height);
-        m_impl->hasFrame = true;
-        frame.Close();
-        return true;
+            m_impl->context->CopyResource(m_impl->copyTexture.get(), texture.get());
+            m_impl->format = desc.Format;
+            m_impl->width = static_cast<int>(desc.Width);
+            m_impl->height = static_cast<int>(desc.Height);
+            m_impl->hasFrame = true;
+            frame.Close();
+        }
+        return m_impl->hasFrame;
     }
     catch (const winrt::hresult_error &error) {
         std::fprintf(stderr, "[wgc] capture 失败: 0x%08lx\n",

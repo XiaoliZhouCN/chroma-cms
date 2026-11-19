@@ -56,6 +56,9 @@ private:
 
     ScreenCapture m_capture;
     bool m_captureReady = false;
+    bool m_hasLastSample = false;
+    ScreenCapture::Sample m_lastSample;
+    ScreenCapture::Sample m_lastMagnifierSample;
     HMONITOR m_monitor = nullptr;
     RECT m_monitorRect = {};
     int m_tickCounter = 0;

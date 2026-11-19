@@ -181,6 +181,7 @@ void MainWindow::initCapture(HMONITOR monitor)
 {
     m_monitor = monitor;
     m_captureReady = false;
+    m_hasLastSample = false;
     m_monitorRect = {};
     if (monitor == nullptr) {
         return;
@@ -193,13 +194,15 @@ void MainWindow::initCapture(HMONITOR monitor)
     }
 
     m_captureReady = m_capture.initialize(monitor, reinterpret_cast<HWND>(winId()));
+    m_hasLastSample = false;
     if (!m_captureReady) {
         m_formatLabel->setText(QStringLiteral("捕获初始化失败（HDR/独占全屏/受保护内容？）"));
         m_infoLabel->setText(QStringLiteral("无法初始化 Desktop Duplication。"));
         return;
     }
 
-    m_formatLabel->setText(formatLabelText(m_capture.frameFormat()));
+    m_formatLabel->setText(QStringLiteral("后端：%1　").arg(QString::fromUtf8(m_capture.backendName())) +
+                           formatLabelText(m_capture.frameFormat()));
     updateDisplayInfo();
 }
 
@@ -226,7 +229,13 @@ void MainWindow::tick()
         m_capture.sampleRect(localX - 3, localY - 2, 6, 5);
 
     if (sample.ok) {
+        m_lastSample = sample;
+        m_lastMagnifierSample = magnifierSample;
+        m_hasLastSample = true;
         updateReadout(sample, magnifierSample, cursor);
+    }
+    else if (m_hasLastSample) {
+        // 瞬时没有新帧时保留上一帧读数，避免界面闪烁。
     }
     else {
         m_formatLabel->setText(QStringLiteral("等待捕获帧…"));
@@ -263,7 +272,8 @@ void MainWindow::updateReadout(const ScreenCapture::Sample &sample,
 
     const DisplayState &display = m_capture.display();
     const bool clipped = isFp16 && (r > 1.0f || g > 1.0f || b > 1.0f);
-    m_formatLabel->setText(formatLabelText(sample.format) +
+    m_formatLabel->setText(QStringLiteral("后端：%1　").arg(QString::fromUtf8(m_capture.backendName())) +
+                          formatLabelText(sample.format) +
                           (clipped ? QStringLiteral("　预览色块已裁剪到 [0,1]") : QString()));
 
     if (display.hdr && !isFp16) {
