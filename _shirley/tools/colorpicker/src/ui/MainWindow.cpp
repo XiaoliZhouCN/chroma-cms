@@ -104,20 +104,6 @@ void MagnifierWidget::paintEvent(QPaintEvent *)
     const QPoint origin((width() - scaled.width()) / 2, (height() - scaled.height()) / 2);
     painter.drawImage(origin, scaled);
 
-    if (m_image.width() > 0 && m_image.height() > 0) {
-        const qreal cellW = static_cast<qreal>(scaled.width()) / m_image.width();
-        const qreal cellH = static_cast<qreal>(scaled.height()) / m_image.height();
-        painter.setPen(QColor(0, 0, 0, 70));
-        for (int x = 0; x <= m_image.width(); ++x) {
-            const int px = origin.x() + static_cast<int>(std::lround(x * cellW));
-            painter.drawLine(px, origin.y(), px, origin.y() + scaled.height());
-        }
-        for (int y = 0; y <= m_image.height(); ++y) {
-            const int py = origin.y() + static_cast<int>(std::lround(y * cellH));
-            painter.drawLine(origin.x(), py, origin.x() + scaled.width(), py);
-        }
-    }
-
     painter.setPen(QPen(QColor(240, 80, 80), 1));
     const int centerX = origin.x() + scaled.width() / 2;
     const int centerY = origin.y() + scaled.height() / 2;
