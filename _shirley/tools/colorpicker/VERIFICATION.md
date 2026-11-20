@@ -462,7 +462,13 @@ cmake --build build_refactor --config Release
   ScreenCaptureKit（注释中的关键词不计）；
 - 平台差异只通过 core 工厂进入。
 
-### 7.6 未验证项
+### 7.6 UI 小修
+
+- 2026-11-20 `0367ca8`：放大镜移除像素网格，仅保留中心十字；
+  `build` / `build_refactor` Debug/Release 均重新构建并截图确认；
+- 当前文档：`README.md` / `ARCHITECTURE.md` / `WINDOWS.md` / `HANDOFF_MACOS.md`。
+
+### 7.7 未验证项
 
 - macOS 骨架无法在 Windows 上编译；仅保证文件、工厂、CMake 分支完整；
 - macOS ScreenCaptureKit、TCC 权限、EDR 预览均为 TODO（见 `ARCHITECTURE.md` §9）；

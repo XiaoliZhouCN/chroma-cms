@@ -1,6 +1,6 @@
 # Chroma ColorPicker 架构规范（Windows / macOS）
 
-> 状态：2026-11-20
+> 状态：2026-11-20（Windows 基线 `0367ca8`）
 > 本文是 colorpicker 的**框架规范**。Windows 已按本规范完成重构；macOS 只提供骨架占位，ScreenCaptureKit 实现待 macOS 上完成。
 
 ## 1. 目标
@@ -146,6 +146,8 @@ src/
 - `MacCaptureSession.mm`：返回 false 的占位，打印 TODO；
 - `MacHdrPreview.cpp`：Qt SDR 占位色块；
 - `MacPlatform.mm`：工厂。
+
+macOS 开发交接与逐项验收见 [`HANDOFF_MACOS.md`](HANDOFF_MACOS.md)。
 
 macOS 实现顺序：
 

@@ -7,6 +7,7 @@
 
 - **Windows**：已完成平台抽象重构，功能与重构前保持一致（Duplication/WGC + HDR 预览）；
 - **macOS**：已建立双平台 CMake/目录/接口骨架，ScreenCaptureKit 捕获与 Metal EDR 预览为 TODO；
+  下一步开发直接按 [`HANDOFF_MACOS.md`](HANDOFF_MACOS.md) 执行；
 - UI 使用 Qt6 Widgets，无边框置顶、可拖动、Esc 退出；16×16 放大镜 + HDR 色块。
 
 ## 文档
@@ -15,6 +16,7 @@
 |---|---|
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 跨平台框架规范：分层、core 接口、平台职责、macOS TODO |
 | [`WINDOWS.md`](WINDOWS.md) | Windows 当前技术方案：D3D11/Duplication/WGC、HDR、元数据、限制 |
+| [`HANDOFF_MACOS.md`](HANDOFF_MACOS.md) | **macOS 开发交接**：任务拆分、验收、已知坑 |
 | [`VERIFICATION.md`](VERIFICATION.md) | 历史问题记录与验证结果 |
 | `verify.ps1` | Windows 一键收集验证信息 |
 
