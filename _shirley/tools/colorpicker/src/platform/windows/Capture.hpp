@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace cp
+namespace cp::win
 {
 class WgcCapture;
 
@@ -128,4 +128,4 @@ private:
     bool m_hasFrame = false;
     DisplayState m_display;
 };
-} // namespace cp
+} // namespace cp::win

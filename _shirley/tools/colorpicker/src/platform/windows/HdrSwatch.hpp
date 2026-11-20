@@ -7,7 +7,7 @@
 
 #include <QWidget>
 
-namespace cp
+namespace cp::win
 {
 /// HDR 色块预览：在子 HWND 上创建 scRGB FP16 swapchain，直接交给 DWM 合成。
 /// 这样 scRGB 值 > 1 的颜色不会被 [0,1] 裁剪（HDR 开启时由系统显示真实 HDR）。
@@ -47,4 +47,4 @@ private:
     float m_b = 0.0f;
     bool m_linear = true;
 };
-} // namespace cp
+} // namespace cp::win

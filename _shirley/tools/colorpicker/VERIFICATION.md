@@ -415,3 +415,55 @@ sdr_white=200.0 max_lum=603.7 name=VG32AQL1A adapter=Intel(R) UHD Graphics 770
 - WGC 首次捕获可能有短暂黑帧/延迟，属于正常现象；
 - 工具使用 `CreateFreeThreaded` + 轮询 `TryGetNextFrame`，未使用事件回调；
 - WGC 数值语义为 scRGB 线性（1.0 = 80 nits），与 Duplication FP16 路径一致。
+
+## 7. 2026-11-20 平台抽象重构回归（Windows）
+
+### 7.1 范围
+
+- 新增 `src/core`：平台无关类型、`ICaptureSession`、`IDisplayProbe`、工厂声明；
+- Windows 实现移入 `src/platform/windows`，并通过 `WindowsCaptureSession` /
+  `WindowsDisplayProbe` / `WindowsHdrPreview` 适配；
+- UI 与 `main.cpp` 改为只依赖 core/UI 接口；
+- macOS 放入 `src/platform/macos` 骨架（CoreGraphics probe + 占位 capture/HDR 预览）；
+- 文档：`ARCHITECTURE.md`、`WINDOWS.md`。
+
+### 7.2 构建
+
+```powershell
+cd _shirley\tools\colorpicker
+cmake -S . -B build_refactor -DCMAKE_PREFIX_PATH="D:/Applications/QtCreator/6.11.1/msvc2022_64"
+cmake --build build_refactor --config Debug
+cmake --build build_refactor --config Release
+```
+
+结果：Debug / Release 均 exit 0；MSVC + WGC 检测通过。
+
+### 7.3 CLI 兼容性
+
+用重构前的 `build_ui\Debug\colorpicker.exe` 与重构后的
+`build_refactor\Debug\colorpicker.exe` 对同一坐标做 `--dump`，`Compare-Object`
+无差异：
+
+- SDR 坐标 `(100,100)`：JSON 完全一致；
+- HDR 坐标 `(3000,500)`：JSON 完全一致（`hdr=true`、`R16G16B16A16_FLOAT`/BGRA 当前路径、
+  `sdr_white_level=2550`、`sdr_white_nits=204.0`、`max_luminance_nits=603.7`）。
+
+`--list` 也保持 SDR/HDR 显示器、格式、backend、HDR 字段与新字段一致。
+
+### 7.4 GUI
+
+- 重构后窗口可启动，16×16 放大镜、HDR 色块、9 行读数正常；
+- 截图：`temp_and_scratch/refactor-ui2.png`（SDR 路径，读数与旧版一致）；
+- Esc/QShortcut、无边框拖动逻辑未改动（沿用重构前实现）。
+
+### 7.5 边界检查
+
+- `src/core`、`src/ui`、`src/app` 未 include `windows.h` / DXGI / D3D11 / AppKit /
+  ScreenCaptureKit（注释中的关键词不计）；
+- 平台差异只通过 core 工厂进入。
+
+### 7.6 未验证项
+
+- macOS 骨架无法在 Windows 上编译；仅保证文件、工厂、CMake 分支完整；
+- macOS ScreenCaptureKit、TCC 权限、EDR 预览均为 TODO（见 `ARCHITECTURE.md` §9）；
+- WGC picker/HDR 路径行为未改，仍按原实现验证。

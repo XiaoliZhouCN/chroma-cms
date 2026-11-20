@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-namespace cp
+namespace cp::win
 {
 /// Windows.Graphics.Capture（WGC）FP16 捕获后端。
 ///
@@ -45,4 +45,4 @@ private:
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 };
-} // namespace cp
+} // namespace cp::win

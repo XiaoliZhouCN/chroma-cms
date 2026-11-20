@@ -11,7 +11,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace cp
+namespace cp::win
 {
 namespace
 {
@@ -619,4 +619,4 @@ const char *ScreenCapture::backendName() const
     return m_backend == Backend::Wgc ? "WGC (Windows.Graphics.Capture FP16)"
                                      : "Duplication (DXGI)";
 }
-} // namespace cp
+} // namespace cp::win

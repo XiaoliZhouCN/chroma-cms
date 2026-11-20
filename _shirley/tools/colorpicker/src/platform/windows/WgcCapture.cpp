@@ -18,7 +18,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace cp
+namespace cp::win
 {
 namespace
 {
@@ -396,13 +396,13 @@ int WgcCapture::height() const
 {
     return m_impl->height;
 }
-} // namespace cp
+} // namespace cp::win
 
 #else // !CHROMA_HAS_WGC
 
 #include <cstdio>
 
-namespace cp
+namespace cp::win
 {
 struct WgcCapture::Impl
 {
@@ -443,6 +443,6 @@ int WgcCapture::height() const
 {
     return 0;
 }
-} // namespace cp
+} // namespace cp::win
 
 #endif // CHROMA_HAS_WGC

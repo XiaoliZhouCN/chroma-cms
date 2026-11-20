@@ -1,9 +1,10 @@
 #include "MainWindow.hpp"
 
-#include "HdrSwatch.hpp"
+#include "ui/HdrPreview.hpp"
+#include "core/Platform.hpp"
 
-#include <QColor>
 #include <QApplication>
+#include <QColor>
 #include <QEvent>
 #include <QFontDatabase>
 #include <QGridLayout>
@@ -26,9 +27,17 @@ namespace cp
 {
 namespace
 {
-QColor previewColor(float r, float g, float b, DXGI_FORMAT format)
+bool sameMonitor(const MonitorInfo &left, const MonitorInfo &right)
 {
-    if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+    if (left.nativeHandle != 0 && right.nativeHandle != 0) {
+        return left.nativeHandle == right.nativeHandle;
+    }
+    return left.id == right.id;
+}
+
+QColor previewColor(float r, float g, float b, PixelEncoding encoding)
+{
+    if (encoding == PixelEncoding::Fp16) {
         const auto encode = [](float value) {
             value = std::clamp(value, 0.0f, 1.0f);
             return value <= 0.0031308f ? 12.92f * value
@@ -40,37 +49,27 @@ QColor previewColor(float r, float g, float b, DXGI_FORMAT format)
                             std::clamp(b, 0.0f, 1.0f));
 }
 
-QString formatText(DXGI_FORMAT format)
+QString formatText(const CaptureFormat &format)
 {
-    if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
-        return QStringLiteral("R16G16B16A16_FLOAT");
-    }
-    if (format == DXGI_FORMAT_B8G8R8A8_UNORM) {
-        return QStringLiteral("B8G8R8A8_UNORM");
-    }
-    return QString::fromStdString(formatToString(format));
+    return QString::fromStdString(format.name);
 }
 
-QString cccsText(DXGI_FORMAT format)
+QString cccsText(const CaptureFormat &format)
 {
-    if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+    if (format.encoding == PixelEncoding::Fp16) {
         return QStringLiteral("scRGB（BT.709，线性）");
     }
     return QStringLiteral("sRGB（BT.709，非线性）");
 }
 
-QString wireText(DXGI_COLOR_SPACE_TYPE colorSpace)
+QString optionalNumber(const std::optional<double> &value, int precision)
 {
-    switch (colorSpace) {
-    case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
-        return QStringLiteral("BT.2020 + PQ（ST.2084）");
-    case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
-        return QStringLiteral("BT.709 + gamma 2.2（sRGB）");
-    case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
-        return QStringLiteral("BT.709 + 线性（scRGB）");
-    default:
-        return QString::fromStdString(colorSpaceToString(colorSpace));
-    }
+    return value ? QString::number(*value, 'f', precision) : QStringLiteral("n/a");
+}
+
+QString optionalUInt(const std::optional<std::uint32_t> &value)
+{
+    return value ? QString::number(*value) : QStringLiteral("n/a");
 }
 
 void makeDraggableLabel(QLabel *label)
@@ -128,6 +127,10 @@ void MagnifierWidget::paintEvent(QPaintEvent *)
 
 MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
 {
+    m_probe = createDisplayProbe();
+    m_capture = createCaptureSession();
+    m_swatch = createHdrPreview(this);
+
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground, false);
     setStyleSheet(QStringLiteral("QWidget { background-color: #151517; color: #e8e8e8; }"));
@@ -144,8 +147,9 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
     m_magnifier = new MagnifierWidget(this);
     m_magnifier->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-    m_swatch = new HdrSwatch(this);
-    m_swatch->setFixedSize(120, 120);
+    if (QWidget *preview = m_swatch ? m_swatch->widget() : nullptr) {
+        preview->setFixedSize(120, 120);
+    }
 
     const QFont fixedFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     auto *right = new QVBoxLayout();
@@ -173,7 +177,9 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
     right->addStretch(1);
 
     top->addWidget(m_magnifier);
-    top->addWidget(m_swatch);
+    if (m_swatch) {
+        top->addWidget(m_swatch->widget());
+    }
     top->addLayout(right, 1);
     root->addLayout(top);
 
@@ -202,14 +208,16 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
             [this](Qt::ApplicationState state) {
                 m_paused = state != Qt::ApplicationActive;
                 if (!m_paused) {
-                    // 从 Windows 设置切回来：SDR 白点/HDR 模式可能已变化。
-                    // 重新初始化捕获，避免 HDR 模式切换后 WGC/Duplication 会话失效。
-                    if (m_monitor != nullptr) {
+                    if (!m_monitor.id.empty()) {
                         initCapture(m_monitor);
                     }
-                    m_capture.refreshDisplayState();
-                    updateInfoLines(m_hasLastSample ? m_lastSample : ScreenCapture::Sample{});
-                    m_swatch->refreshSurface();
+                    if (m_capture) {
+                        m_capture->refreshDisplayState();
+                    }
+                    updateInfoLines(m_hasLastSample ? m_lastSample : ColorSample{});
+                    if (m_swatch) {
+                        m_swatch->refreshSurface();
+                    }
                 }
             });
 
@@ -218,8 +226,6 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
     connect(m_timer, &QTimer::timeout, this, &MainWindow::tick);
     m_timer->start();
 
-    // 独立于采集：拖动 Windows HDR "SDR 内容亮度"滑杆时工具是 inactive，
-    // 采集会暂停，但显示元数据仍需刷新（WM_SETTINGCHANGE / ImmersiveColorSet）。
     m_infoTimer = new QTimer(this);
     m_infoTimer->setInterval(500);
     connect(m_infoTimer, &QTimer::timeout, this, &MainWindow::refreshMetadata);
@@ -228,85 +234,78 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent)
     tick();
 }
 
-void MainWindow::initCapture(HMONITOR monitor)
+void MainWindow::initCapture(const MonitorInfo &monitor)
 {
     m_monitor = monitor;
     m_captureReady = false;
     m_hasLastSample = false;
-    m_monitorRect = {};
-    if (monitor == nullptr) {
+    m_monitorRect = monitor.bounds;
+    if (monitor.id.empty()) {
         return;
     }
 
-    MONITORINFOEXW info{};
-    info.cbSize = sizeof(info);
-    if (GetMonitorInfoW(monitor, &info)) {
-        m_monitorRect = info.rcMonitor;
-    }
-
-    m_captureReady = m_capture.initialize(monitor, reinterpret_cast<HWND>(winId()));
-    m_hasLastSample = false;
+    m_captureReady = (m_capture != nullptr) &&
+                     m_capture->initialize(monitor, static_cast<NativeWindow>(winId()));
     if (!m_captureReady) {
-        m_infoLabels[0]->setText(QStringLiteral("捕获格式：初始化失败"));
+        if (!m_infoLabels.isEmpty()) {
+            m_infoLabels[0]->setText(QStringLiteral("捕获格式：初始化失败"));
+        }
         return;
     }
-    updateInfoLines(ScreenCapture::Sample{});
+    updateInfoLines(ColorSample{});
 }
 
 void MainWindow::refreshMetadata()
 {
-    if (!m_captureReady) {
+    if (!m_captureReady || !m_capture) {
         return;
     }
-    m_capture.refreshDisplayState();
-    updateInfoLines(m_hasLastSample ? m_lastSample : ScreenCapture::Sample{});
+    m_capture->refreshDisplayState();
+    updateInfoLines(m_hasLastSample ? m_lastSample : ColorSample{});
 }
 
 void MainWindow::tick()
 {
-    if (m_paused) {
-        return;
-    }
-    POINT cursor{};
-    if (!GetCursorPos(&cursor)) {
-        return;
-    }
-    const HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-    if (!m_captureReady) {
-        initCapture(monitor);
-    }
-    else if (monitor != m_monitor && m_capture.backend() != ScreenCapture::Backend::Wgc) {
-        initCapture(monitor);
-    }
-
-    if (!m_captureReady) {
-        return;
-    }
-    if (monitor != m_monitor) {
+    if (m_paused || !m_probe || !m_capture) {
         return;
     }
 
-    m_capture.captureFrame();
+    const PointI cursor = m_probe->cursorPosition();
+    const MonitorInfo monitor = m_probe->monitorAt(cursor);
+    if (monitor.id.empty()) {
+        return;
+    }
+
+    if (!m_captureReady) {
+        initCapture(monitor);
+    }
+    else if (!sameMonitor(monitor, m_monitor) &&
+             m_capture->backend() != CaptureBackendKind::Wgc) {
+        initCapture(monitor);
+    }
+
+    if (!m_captureReady || !sameMonitor(monitor, m_monitor)) {
+        return;
+    }
+
+    m_capture->captureFrame();
 
     const int localX = cursor.x - m_monitorRect.left;
     const int localY = cursor.y - m_monitorRect.top;
-    const ScreenCapture::Sample sample = m_capture.sampleRect(localX, localY, 1, 1);
-    const ScreenCapture::Sample magnifierSample =
-        m_capture.sampleRect(localX - 8, localY - 8, 16, 16);
+    const ColorSample sample = m_capture->sampleRect(localX, localY, 1, 1);
+    const ColorSample magnifierSample = m_capture->sampleRect(localX - 8, localY - 8, 16, 16);
 
     if (sample.ok) {
         m_lastSample = sample;
         m_lastMagnifierSample = magnifierSample;
         m_hasLastSample = true;
-        updateReadout(sample, magnifierSample, cursor);
+        updateReadout(sample, magnifierSample);
     }
 }
 
-void MainWindow::updateReadout(const ScreenCapture::Sample &sample,
-                               const ScreenCapture::Sample &magSample, POINT cursor)
+void MainWindow::updateReadout(const ColorSample &sample, const ColorSample &magSample)
 {
-    Q_UNUSED(cursor);
-    const bool isFp16 = sample.format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+    const bool isFp16 = sample.format.encoding == PixelEncoding::Fp16;
     const float r = sample.rgba[0];
     const float g = sample.rgba[1];
     const float b = sample.rgba[2];
@@ -322,14 +321,15 @@ void MainWindow::updateReadout(const ScreenCapture::Sample &sample,
         m_bLabel->setText(QStringLiteral("B = %1").arg(std::lround(b * 255.0f)));
     }
 
-    m_cccsText = cccsText(sample.format);
-    m_cccsLabel->setText(QStringLiteral("CCCS：%1").arg(m_cccsText));
-    m_swatch->setColor(r, g, b, isFp16);
+    m_cccsLabel->setText(QStringLiteral("CCCS：%1").arg(cccsText(sample.format)));
+    if (m_swatch) {
+        m_swatch->setColor(r, g, b, isFp16);
+    }
     updateMagnifier(magSample);
     updateInfoLines(sample);
 }
 
-void MainWindow::updateMagnifier(const ScreenCapture::Sample &sample)
+void MainWindow::updateMagnifier(const ColorSample &sample)
 {
     if (!sample.ok || sample.width <= 0 || sample.height <= 0) {
         return;
@@ -339,33 +339,38 @@ void MainWindow::updateMagnifier(const ScreenCapture::Sample &sample)
         for (int x = 0; x < sample.width; ++x) {
             const std::size_t base = static_cast<std::size_t>(y * sample.width + x) * 4;
             const QColor color = previewColor(sample.rgba[base + 0], sample.rgba[base + 1],
-                                              sample.rgba[base + 2], sample.format);
+                                              sample.rgba[base + 2], sample.format.encoding);
             image.setPixelColor(x, y, color);
         }
     }
     m_magnifier->setImage(image);
 }
 
-void MainWindow::updateInfoLines(const ScreenCapture::Sample &sample)
+void MainWindow::updateInfoLines(const ColorSample &sample)
 {
-    const DisplayState &display = m_capture.display();
-    const DXGI_FORMAT format = sample.ok ? sample.format : m_capture.frameFormat();
-    const bool isFp16 = format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+    if (!m_capture || m_infoLabels.size() < 9) {
+        return;
+    }
+    const DisplayInfo &display = m_capture->display();
+    const CaptureFormat format = sample.ok ? sample.format : m_capture->format();
+    const bool isFp16 = format.encoding == PixelEncoding::Fp16;
 
-    const std::uint32_t sdrWhiteLevelRaw = display.sdrWhiteLevelRaw;
-    const double oneNits = (m_capture.hdr() && isFp16) ? 80.0 : display.sdrWhiteNits;
+    const double oneNits =
+        (display.hdr && isFp16) ? 80.0 : display.sdrWhiteNits.value_or(80.0);
 
     m_infoLabels[0]->setText(QStringLiteral("捕获格式：%1").arg(formatText(format)));
     m_infoLabels[1]->setText(QStringLiteral("CCCS色域：%1").arg(cccsText(format)));
-    m_infoLabels[2]->setText(QStringLiteral("wire format：%1").arg(wireText(display.colorSpace)));
+    m_infoLabels[2]->setText(QStringLiteral("wire format：%1")
+                                 .arg(QString::fromStdString(display.wireFormat.empty() ? display.colorSpace
+                                                                    : display.wireFormat)));
     m_infoLabels[3]->setText(QStringLiteral("SDR内容亮度滑杆值：%1（SDRWhiteLevel 原始值）")
-                                 .arg(sdrWhiteLevelRaw));
+                                 .arg(optionalUInt(display.sdrWhiteLevelRaw)));
     m_infoLabels[4]->setText(QStringLiteral("SDR白点：%1 nits")
-                                 .arg(QString::number(display.sdrWhiteNits, 'f', 1)));
+                                 .arg(optionalNumber(display.sdrWhiteNits, 1)));
     m_infoLabels[5]->setText(QStringLiteral("1.0对应实际nits：%1 nits")
                                  .arg(QString::number(oneNits, 'f', 1)));
     m_infoLabels[6]->setText(QStringLiteral("最大亮度：%1 nits")
-                                 .arg(QString::number(display.maxLuminance, 'f', 1)));
+                                 .arg(optionalNumber(display.maxLuminance, 1)));
     m_infoLabels[7]->setText(QStringLiteral("位数：%1").arg(display.bitsPerColor));
     m_infoLabels[8]->setText(QStringLiteral("Advanced Color：%1")
                                  .arg(display.advancedColorEnabled ? QStringLiteral("已启用")

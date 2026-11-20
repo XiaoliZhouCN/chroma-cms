@@ -1,14 +1,14 @@
-#include "Capture.hpp"
-#include "MainWindow.hpp"
+#include "core/Platform.hpp"
+#include "core/Types.hpp"
+#include "ui/MainWindow.hpp"
 
 #include <QApplication>
 
-#include <windows.h>
-
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -52,87 +52,96 @@ bool parseArgs(int argc, char **argv, Options &options)
     return true;
 }
 
+void printOptionalDouble(const char *key, const std::optional<double> &value, bool last = false)
+{
+    if (value) {
+        std::printf("  \"%s\": %.1f%s\n", key, *value, last ? "" : ",");
+    }
+    else {
+        std::printf("  \"%s\": null%s\n", key, last ? "" : ",");
+    }
+}
+
 int runList()
 {
-    const std::vector<cp::MonitorInfo> monitors = cp::enumerateMonitors();
+    const std::unique_ptr<cp::IDisplayProbe> probe = cp::createDisplayProbe();
+    const std::vector<cp::MonitorInfo> monitors = probe->enumerate();
     for (const cp::MonitorInfo &monitor : monitors) {
-        cp::ScreenCapture capture;
-        const bool ok = capture.initialize(monitor.handle);
+        std::unique_ptr<cp::ICaptureSession> capture = cp::createCaptureSession();
+        const bool ok = capture->initialize(monitor, 0);
         if (ok) {
-            capture.captureFrame();
+            capture->captureFrame();
         }
-        const cp::DisplayState &display = capture.display();
-        std::printf("monitor=%ls rect=(%ld,%ld)-(%ld,%ld) init=%s backend=%s format=%s hdr=%s "
+        const cp::DisplayInfo &display = capture->display();
+        const cp::CaptureFormat format = capture->format();
+        std::printf("monitor=%s rect=(%d,%d)-(%d,%d) init=%s backend=%s format=%s hdr=%s "
                     "color_space=%s advanced_supported=%s advanced_enabled=%s "
                     "wide_enforced=%s force_disabled=%s encoding=%s cfg_bits=%u "
-                    "desc1_bits=%u sdr_white=%.1f max_lum=%.1f name=%ls adapter=%ls\n",
-                    monitor.gdiName.c_str(),
-                    static_cast<long>(monitor.rect.left), static_cast<long>(monitor.rect.top),
-                    static_cast<long>(monitor.rect.right), static_cast<long>(monitor.rect.bottom),
-                    ok ? "ok" : "fail",
-                    capture.backendName(),
-                    cp::formatToString(capture.frameFormat()).c_str(),
-                    display.hdr ? "on" : "off",
-                    cp::colorSpaceToString(display.colorSpace).c_str(),
+                    "desc1_bits=%u sdr_white=%.1f max_lum=%.1f name=%s adapter=%s\n",
+                    monitor.id.c_str(), monitor.bounds.left, monitor.bounds.top,
+                    monitor.bounds.right, monitor.bounds.bottom, ok ? "ok" : "fail",
+                    capture->backendName(), format.name.c_str(), display.hdr ? "on" : "off",
+                    display.colorSpace.c_str(),
                     display.advancedColorSupported ? "on" : "off",
                     display.advancedColorEnabled ? "on" : "off",
                     display.wideColorEnforced ? "on" : "off",
                     display.advancedColorForceDisabled ? "on" : "off",
-                    cp::colorEncodingToString(display.colorEncoding).c_str(),
-                    display.configBitsPerColor, display.bitsPerColor,
-                    display.sdrWhiteNits, display.maxLuminance,
-                    display.friendlyName.c_str(), display.adapterName.c_str());
-        capture.release();
+                    display.colorEncoding.c_str(), display.configBitsPerColor,
+                    display.bitsPerColor, display.sdrWhiteNits.value_or(0.0),
+                    display.maxLuminance.value_or(0.0), display.friendlyName.c_str(),
+                    display.adapterName.c_str());
+        capture->release();
     }
     return 0;
 }
 
 int runDump(const Options &options)
 {
-    SetProcessDPIAware(); // 仅 dump 模式需要物理像素坐标；GUI 由 Qt 管理 DPI
-    POINT cursor{};
-    if (!GetCursorPos(&cursor)) {
-        std::fprintf(stderr, "GetCursorPos 失败\n");
-        return 2;
-    }
+    cp::prepareProcessForDump();
+
+    const std::unique_ptr<cp::IDisplayProbe> probe = cp::createDisplayProbe();
+    cp::PointI cursor = probe->cursorPosition();
     if (options.hasPoint) {
         cursor.x = options.x;
         cursor.y = options.y;
     }
 
-    const cp::MonitorInfo monitor = cp::monitorFromPoint(cursor);
-    cp::ScreenCapture capture;
-    if (!capture.initialize(monitor.handle)) {
-        std::fprintf(stderr, "捕获初始化失败（monitor=%ls）\n", monitor.gdiName.c_str());
+    const cp::MonitorInfo monitor = probe->monitorAt(cursor);
+    if (monitor.id.empty()) {
+        std::fprintf(stderr, "找不到显示器（坐标 %d,%d）\n", cursor.x, cursor.y);
         return 1;
     }
-    capture.captureFrame();
 
-    const int localX = cursor.x - monitor.rect.left;
-    const int localY = cursor.y - monitor.rect.top;
-    cp::ScreenCapture::Sample sample;
+    std::unique_ptr<cp::ICaptureSession> capture = cp::createCaptureSession();
+    if (!capture->initialize(monitor, 0)) {
+        std::fprintf(stderr, "捕获初始化失败（monitor=%s）\n", monitor.id.c_str());
+        return 1;
+    }
+    capture->captureFrame();
+
+    const int localX = cursor.x - monitor.bounds.left;
+    const int localY = cursor.y - monitor.bounds.top;
+    cp::ColorSample sample;
     for (int attempt = 0; attempt < 40; ++attempt) {
-        sample = capture.sampleRect(localX, localY, 1, 1);
+        sample = capture->sampleRect(localX, localY, 1, 1);
         if (sample.ok && (sample.rgba[0] + sample.rgba[1] + sample.rgba[2]) > 0.01f) {
             break;
         }
-        Sleep(50);
-        capture.captureFrame();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        capture->captureFrame();
     }
     if (!sample.ok) {
         std::fprintf(stderr, "采样失败（frame=%s，local=%d,%d）\n",
-                     cp::formatToString(capture.frameFormat()).c_str(), localX, localY);
+                     capture->format().name.c_str(), localX, localY);
         return 1;
     }
 
-    const cp::DisplayState &display = capture.display();
+    const cp::DisplayInfo &display = capture->display();
     std::printf("{\n");
-    std::printf("  \"backend\": \"%s\",\n", capture.backendName());
-    std::printf("  \"capture_format\": \"%s\",\n",
-                cp::formatToString(sample.format).c_str());
+    std::printf("  \"backend\": \"%s\",\n", capture->backendName());
+    std::printf("  \"capture_format\": \"%s\",\n", sample.format.name.c_str());
     std::printf("  \"hdr\": %s,\n", display.hdr ? "true" : "false");
-    std::printf("  \"color_space\": \"%s\",\n",
-                cp::colorSpaceToString(display.colorSpace).c_str());
+    std::printf("  \"color_space\": \"%s\",\n", display.colorSpace.c_str());
     std::printf("  \"advanced_color_supported\": %s,\n",
                 display.advancedColorSupported ? "true" : "false");
     std::printf("  \"advanced_color_enabled\": %s,\n",
@@ -141,19 +150,22 @@ int runDump(const Options &options)
                 display.wideColorEnforced ? "true" : "false");
     std::printf("  \"advanced_color_force_disabled\": %s,\n",
                 display.advancedColorForceDisabled ? "true" : "false");
-    std::printf("  \"color_encoding\": \"%s\",\n",
-                cp::colorEncodingToString(display.colorEncoding).c_str());
+    std::printf("  \"color_encoding\": \"%s\",\n", display.colorEncoding.c_str());
     std::printf("  \"config_bits_per_color\": %u,\n", display.configBitsPerColor);
-    std::printf("  \"remote_session\": %s,\n",
-                GetSystemMetrics(SM_REMOTESESSION) != 0 ? "true" : "false");
-    std::printf("  \"adapter\": \"%ls\",\n", display.adapterName.c_str());
-    std::printf("  \"sdr_white_level\": %u,\n", display.sdrWhiteLevelRaw);
-    std::printf("  \"sdr_white_nits\": %.1f,\n", display.sdrWhiteNits);
-    std::printf("  \"max_luminance_nits\": %.1f,\n", display.maxLuminance);
+    std::printf("  \"remote_session\": %s,\n", display.remoteSession ? "true" : "false");
+    std::printf("  \"adapter\": \"%s\",\n", display.adapterName.c_str());
+    if (display.sdrWhiteLevelRaw) {
+        std::printf("  \"sdr_white_level\": %u,\n", *display.sdrWhiteLevelRaw);
+    }
+    else {
+        std::printf("  \"sdr_white_level\": null,\n");
+    }
+    printOptionalDouble("sdr_white_nits", display.sdrWhiteNits);
+    printOptionalDouble("max_luminance_nits", display.maxLuminance);
     std::printf("  \"bits_per_color\": %u,\n", display.bitsPerColor);
-    std::printf("  \"monitor\": \"%ls\",\n", display.gdiName.c_str());
-    std::printf("  \"screen_x\": %ld,\n", static_cast<long>(cursor.x));
-    std::printf("  \"screen_y\": %ld,\n", static_cast<long>(cursor.y));
+    std::printf("  \"monitor\": \"%s\",\n", display.gdiName.c_str());
+    std::printf("  \"screen_x\": %d,\n", cursor.x);
+    std::printf("  \"screen_y\": %d,\n", cursor.y);
     std::printf("  \"r\": %.6f,\n", sample.rgba[0]);
     std::printf("  \"g\": %.6f,\n", sample.rgba[1]);
     std::printf("  \"b\": %.6f,\n", sample.rgba[2]);

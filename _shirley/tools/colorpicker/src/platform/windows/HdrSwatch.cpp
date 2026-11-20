@@ -13,7 +13,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace cp
+namespace cp::win
 {
 namespace
 {
@@ -235,4 +235,4 @@ void HdrSwatch::paintEvent(QPaintEvent *event)
     const float b = m_linear ? encode(m_b) : std::clamp(m_b, 0.0f, 1.0f);
     painter.fillRect(rect(), QColor::fromRgbF(r, g, b));
 }
-} // namespace cp
+} // namespace cp::win

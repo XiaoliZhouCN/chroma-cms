@@ -1,38 +1,37 @@
-# Chroma ColorPicker（HDR raw 原型）
+# Chroma ColorPicker
 
-独立的小工具：在 Windows 11 HDR 显示器上读取**鼠标光标下 1×1 像素**的原始捕获值，
+跨平台（Windows / macOS）屏幕原始取色小工具：读取鼠标光标下 1×1 像素的捕获值，
 用于对比 Chrome 与 ChromaCMS 同一张测试图的输出。
 
-## 当前能力（第一版）
+当前状态（2026-11-20）：
 
-- Qt6 小窗口置顶，连续跟随鼠标取色；
-- 放大镜 100×80（16×）+ 颜色块 50×50 + 3 行原始 RGB；
-- 捕获后端（自动选择）：
-  - SDR：`IDXGIOutput5::DuplicateOutput1` / legacy `DuplicateOutput`；
-  - HDR：先探测 Duplication 是否返回 `R16G16B16A16_FLOAT`；拿不到则自动切
-    `Windows.Graphics.Capture`（FP16/scRGB）后端；
-  - 可用 `CHROMA_FORCE_WGC=1` 环境变量强制测试 WGC；
-- 显示状态：HDR 开关、DXGI 色彩空间、SDR 白点（nits）、最大亮度、显示器名；
-- 隐藏调试命令：`colorpicker --dump [--x X --y Y]` 输出 JSON（用于自动验证）。
+- **Windows**：已完成平台抽象重构，功能与重构前保持一致（Duplication/WGC + HDR 预览）；
+- **macOS**：已建立双平台 CMake/目录/接口骨架，ScreenCaptureKit 捕获与 Metal EDR 预览为 TODO；
+- UI 使用 Qt6 Widgets，无边框置顶、可拖动、Esc 退出；16×16 放大镜 + HDR 色块。
 
-## 不做的事（本版）
+## 文档
 
-- 不做色彩管理/换算（不显示 sRGB/P3/XYZ/Lab，只显示捕获原始值）；
-- 不做格式选项、保存、热键、11×11 平均、ICC 转换；
-- 不保证"面板物理颜色"——软件只能读到合成后的 framebuffer 数值。
+| 文档 | 内容 |
+|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 跨平台框架规范：分层、core 接口、平台职责、macOS TODO |
+| [`WINDOWS.md`](WINDOWS.md) | Windows 当前技术方案：D3D11/Duplication/WGC、HDR、元数据、限制 |
+| [`VERIFICATION.md`](VERIFICATION.md) | 历史问题记录与验证结果 |
+| `verify.ps1` | Windows 一键收集验证信息 |
 
-## 换机/HDR 验证
+## 目录
 
-完整的问题记录、当前状态和换机测试步骤见 [`VERIFICATION.md`](VERIFICATION.md)。
-
-一键收集验证信息（推荐在新电脑上运行）：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\verify.ps1
+```text
+src/
+  core/        平台无关类型 + ICaptureSession / IDisplayProbe / 工厂声明
+  ui/          MainWindow、放大镜、HdrPreview 接口
+  app/         main.cpp（GUI / --list / --dump）
+  platform/
+    windows/   D3D11 Duplication、WGC、HDR swatch、probe、适配器
+    macos/     CoreGraphics probe + ScreenCaptureKit 骨架
 ```
 
-会生成 `verification-*.txt`，包含会话类型、GPU/当前模式、dxdiag HDR 字段、
-`--list` 与每个显示器中心点的 `--dump` 结果。
+规则：`core/ui/app` 不包含平台头文件；平台差异只通过 `createDisplayProbe()` /
+`createCaptureSession()` / `createHdrPreview()` 进入。详见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
 ## 构建（Windows / MSVC + Qt6）
 
@@ -45,59 +44,36 @@ cmake --build build --config Debug
 
 产物：`build\Debug\colorpicker.exe`
 
+MinGW：可构建 SDR/Duplication 路径；WGC 仅在 MSVC + Windows SDK C++/WinRT 下启用。
+
+## macOS 骨架构建（待 macOS 实机验证）
+
+```bash
+cd _shirley/tools/colorpicker
+cmake -S . -B build-macos -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+cmake --build build-macos --config Release
+```
+
+当前 macOS 后端是占位：能枚举显示器、打开 UI，但捕获初始化会打印 TODO 并失败；
+ScreenCaptureKit/HDR/Metal EDR 实现计划见 [`ARCHITECTURE.md`](ARCHITECTURE.md) §9。
+
 ## 运行
 
 ```powershell
-.\build\Debug\colorpicker.exe
-# 调试：打印当前光标位置的捕获结果
-.\build\Debug\colorpicker.exe --dump
-# 调试：列出所有显示器与 HDR 状态
-.\build\Debug\colorpicker.exe --list
+.\build\Debug\colorpicker.exe              # GUI
+.\build\Debug\colorpicker.exe --dump       # 当前光标位置 JSON
+.\build\Debug\colorpicker.exe --list       # 显示器与 HDR 状态
 ```
 
-## 读数说明
+## 读数
 
-- `R16G16B16A16_FLOAT`：DWM 合成使用的 scRGB 线性值（1.0 = 80 nits）；
-- `B8G8R8A8_UNORM`：SDR 8-bit（sRGB 编码），HDR 开启时读到的是截断后的值；
-- 窗口会显示当前捕获格式与显示器 HDR 状态，便于判断当前数据属于哪条路径。
+- `R16G16B16A16_FLOAT`（Windows HDR）：DWM CCCS scRGB 线性值，1.0 = 80 nits；
+- `B8G8R8A8_UNORM`（SDR）：sRGB 编码值，0..1；
+- 面板中的 `CCCS`、`wire format`、`SDRWhiteLevel` 均为 Windows 语义；
+  macOS 实现后会显示实际捕获色彩空间，不假装 scRGB。
+- 放大镜是 sRGB 近似预览；右侧色块走平台 HDR 预览（Windows 为 scRGB swapchain）。
 
-## 当前验证（2026-11-19，本机 Console 会话）
+## 验证
 
-- DISPLAY1（VG32AQL1A）HDR 已开启：dxdiag 显示
-  `Display Color Space: DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020`、
-  `Active Color Mode: DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR`；
-  工具 `--list` 现在正确输出 `hdr=on`、`max_lum=603.7`；
-- **已知问题**：该 Intel UHD 驱动上，`IDXGIOutput5::DuplicateOutput1` 在 HDR 模式下
-  仍返回 `B8G8R8A8_UNORM`，HDR 数值被截断（白色读到 1.0）。下一步补
-  `Windows.Graphics.Capture` FP16 后端。
-- 已知纯红窗口测试：`--dump` 返回 `r=1.0 g=0.0 b=0.0`，与 GDI 读数一致；
-- 内屏 BOE 1920×1200 经 dxdiag 确认 `HDR Not Supported`，不是 HDR 屏；
-- **换机复测（第二台 Windows，Qt 6.12.0 mingw_64 + MinGW GCC 15.1 构建）**：
-  HDR 仍开启，但 `--dump` 依旧只给 `B8G8R8A8_UNORM`（白色锁死 1.0，打开 HDR 窗口也不变）；
-  该机 `DuplicateOutput1` 对**任何**格式列表都返回 `DXGI_ERROR_UNSUPPORTED`，比上面记录的情况更彻底。
-  已确定必须启用 WGC 备用方案。
-- **WGC 后端（2026-11-19 实现）**：MSVC 构建启用；HDR 屏自动优先使用 WGC FP16，
-  取不到 WGC 时回退 Duplication；MinGW 仍只走 Duplication。
-  programmatic `CreateForMonitor` 被系统拒绝（`E_ACCESSDENIED`）时，会弹系统 picker
-  让用户选择显示器；`%ws` 已改为标准 `%ls`（MinGW 兼容）。
-  详见 [`VERIFICATION.md`](VERIFICATION.md) §5/§6。
-
-## 已知限制
-
-- 本机 Intel UHD 上 HDR 模式下 `DuplicateOutput1` 只返回 BGRA8，HDR 数值不完整；
-  WGC 后端已实现（`src/WgcCapture.*`），但需要在本机物理控制台 + HDR 下验证；
-  WGC 仅在 MSVC 构建启用（CMake 自动检测 SDK C++/WinRT）；MinGW 构建保持 Duplication；
-- 某些系统/策略会拒绝 programmatic WGC（`CreateForMonitor` 返回 `E_ACCESSDENIED`）。
-  工具会自动改用**系统 picker**：运行 GUI（从 cmd/PowerShell 启动以便看 stderr），
-  在系统弹出的捕获选择框中选择**目标显示器**，即可走 WGC FP16；
-  picker 需要 GUI 窗口，`--dump` 无窗口时无法使用 picker，只能回退 Duplication；
-- 受保护内容 / 独占全屏 / secure desktop 会导致 `ACCESS_LOST`；
-- Desktop Duplication / WGC 刚初始化时可能先返回黑帧，随后桌面更新后恢复；`--dump` 会自动重试；
-- 显示器切换 HDR 开关后，状态最多延迟约 2 秒刷新；
-- 颜色块和放大镜使用 sRGB 近似预览，HDR 值 > 1 会被裁剪，仅作视觉参考。
-
-## 验证方案（本版）
-
-同一张测试图分别在 Chrome 和 ChromaCMS 中显示，把光标移到同一像素，记录工具显示的
-"捕获格式 + 显示器 HDR 状态 + 原始 RGB"；两侧结论只描述"各自处于什么捕获路径、原始值是多少"，
-本版不做 ΔE 或跨色域换算。
+重构后的 Windows 回归步骤与结果见 [`VERIFICATION.md`](VERIFICATION.md) 的
+"2026-11-20 平台抽象重构回归"一节。
