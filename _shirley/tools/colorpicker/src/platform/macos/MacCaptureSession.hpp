@@ -2,16 +2,21 @@
 
 #include "core/CaptureSession.hpp"
 
+#include <memory>
+
 namespace cp::mac
 {
-/// macOS 捕获骨架。
-/// TODO: 用 ScreenCaptureKit (SCStream / SCScreenshotManager) 实现：
-///   - SDR: 32BGRA + CGColorSpace；
-///   - HDR (macOS 15+): captureHDRStreamLocalDisplay / CanonicalDisplay，
-///     10-bit YCbCr + Display P3 PQ/HLG，并做 YCbCr→RGB / PQ→nits 转换。
+/// macOS ScreenCaptureKit 捕获。
+///
+/// 当前实现：SDR 32BGRA 连续流；HDR/EDR 后续接入。
+/// ScreenCaptureKit 的初始化/startCapture 是异步的，initialize() 返回
+/// “已发起初始化”，UI 在最新帧到达前显示占位值。
 class MacCaptureSession final : public cp::ICaptureSession
 {
 public:
+    MacCaptureSession();
+    ~MacCaptureSession() override;
+
     bool initialize(const cp::MonitorInfo &monitor, cp::NativeWindow owner) override;
     void release() override;
 
@@ -26,7 +31,14 @@ public:
     int width() const override;
     int height() const override;
 
+    bool supportsHdrModes() const override { return true; }
+    void setHdrMode(cp::HdrCaptureMode mode) override { m_hdrMode = mode; }
+    cp::HdrCaptureMode hdrMode() const override { return m_hdrMode; }
+
 private:
+    struct Impl;
+    std::shared_ptr<Impl> m_impl;
     cp::DisplayInfo m_display;
+    cp::HdrCaptureMode m_hdrMode = cp::HdrCaptureMode::ApplePreset;
 };
 } // namespace cp::mac

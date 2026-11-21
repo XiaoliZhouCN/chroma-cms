@@ -19,6 +19,12 @@ cp::MonitorInfo toCoreDisplay(CGDirectDisplayID display)
     monitor.bounds.top = static_cast<int>(bounds.origin.y);
     monitor.bounds.right = static_cast<int>(bounds.origin.x + bounds.size.width);
     monitor.bounds.bottom = static_cast<int>(bounds.origin.y + bounds.size.height);
+    if (bounds.size.width > 0.0) {
+        monitor.scale = static_cast<double>(CGDisplayPixelsWide(display)) / bounds.size.width;
+    }
+    if (monitor.scale <= 0.0) {
+        monitor.scale = 1.0;
+    }
     monitor.primary = CGDisplayIsMain(display) != 0;
     monitor.nativeHandle = static_cast<std::uintptr_t>(display);
     return monitor;

@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chroma ColorPicker · Panel</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page">
+    <main class="monitor-stack">
+      <!-- =========================================================
+           Windows 显示器
+           取色器面板：右侧、200px 宽、与显示器等高、无边框、置顶
+           ========================================================= -->
+      <section class="monitor">
+        <header class="monitor-label">
+          <span class="platform-tag win">WINDOWS</span>
+          <span>2560 × 1440 · 100%</span>
+        </header>
+
+        <div class="screen windows-screen">
+          <aside class="color-panel" aria-label="Windows 取色器面板">
+            <div class="panel-top">
+              <div class="magnifier" aria-label="80 × 80 放大镜">
+                <span class="magnifier-cross" aria-hidden="true"></span>
+              </div>
+
+              <div class="preview-column">
+                <div class="swatch swatch-windows" aria-label="30 × 30 色块预览"></div>
+
+                <!-- 四行信息：色域、R、G、B -->
+                <div class="readout">
+                  <div class="readout-row">
+                    <span>色域</span>
+                    <strong>CCCS</strong>
+                  </div>
+                  <div class="readout-row">
+                    <span>R</span>
+                    <strong>1.2345</strong>
+                  </div>
+                  <div class="readout-row">
+                    <span>G</span>
+                    <strong>0.8765</strong>
+                  </div>
+                  <div class="readout-row">
+                    <span>B</span>
+                    <strong>0.5432</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <section class="data-panel">
+              <h2>合成空间</h2>
+              <div class="kv-list">
+                <div class="kv-item">
+                  <div class="kv-key">合成空间</div>
+                  <div class="kv-value">CCCS · scRGB（BT.709 线性）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">捕获输出空间</div>
+                  <div class="kv-value">CCCS / SDR</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">捕获格式</div>
+                  <div class="kv-value">R16G16B16A16_FLOAT</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">SDR 内容亮度滑杆值</div>
+                  <div class="kv-value">2550（SDRWhiteLevel）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">SDR 白点</div>
+                  <div class="kv-value">204.0 nits</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">1.0 对应实际 nits</div>
+                  <div class="kv-value">80.0 nits</div>
+                </div>
+              </div>
+            </section>
+
+            <section class="data-panel">
+              <h2>显示输出</h2>
+              <div class="kv-list">
+                <div class="kv-item">
+                  <div class="kv-key">wire format</div>
+                  <div class="kv-value">BT.2020 + PQ（ST.2084）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">显示器 ICC</div>
+                  <div class="kv-value">sRGB IEC61966-2.1</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">EDR headroom</div>
+                  <div class="kv-value">n/a（Windows 无 EDR）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">最大亮度</div>
+                  <div class="kv-value">1000.0 nits</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">位数</div>
+                  <div class="kv-value">10</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">HDR / Advanced Color</div>
+                  <div class="kv-value">已启用</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">实际 scanout 空间</div>
+                  <div class="kv-value">BT.2020 + PQ（wire）</div>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           macOS 显示器
+           字段结构、尺寸、位置与 Windows 完全一致
+           ========================================================= -->
+      <section class="monitor">
+        <header class="monitor-label">
+          <span class="platform-tag mac">MACOS</span>
+          <span>2560 × 1440 · EDR</span>
+        </header>
+
+        <div class="screen macos-screen">
+          <aside class="color-panel" aria-label="macOS 取色器面板">
+            <div class="panel-top">
+              <div class="magnifier" aria-label="80 × 80 放大镜">
+                <span class="magnifier-cross" aria-hidden="true"></span>
+              </div>
+
+              <div class="preview-column">
+                <div class="swatch swatch-macos" aria-label="30 × 30 色块预览"></div>
+
+                <div class="readout">
+                  <div class="readout-row">
+                    <span>色域</span>
+                    <strong>P3</strong>
+                  </div>
+                  <div class="readout-row">
+                    <span>R</span>
+                    <strong>0.8765</strong>
+                  </div>
+                  <div class="readout-row">
+                    <span>G</span>
+                    <strong>0.6543</strong>
+                  </div>
+                  <div class="readout-row">
+                    <span>B</span>
+                    <strong>0.4321</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <section class="data-panel">
+              <h2>合成空间</h2>
+              <div class="kv-list">
+                <div class="kv-item">
+                  <div class="kv-key">合成空间</div>
+                  <div class="kv-value">不公开（Apple 无 API）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">捕获输出空间</div>
+                  <div class="kv-value">Extended Linear Display P3</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">捕获格式</div>
+                  <div class="kv-value">RGhA（16F）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">SDR 内容亮度滑杆值</div>
+                  <div class="kv-value">n/a</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">SDR 白点</div>
+                  <div class="kv-value">n/a</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">1.0 对应实际 nits</div>
+                  <div class="kv-value">n/a（按捕获格式解释）</div>
+                </div>
+              </div>
+            </section>
+
+            <section class="data-panel">
+              <h2>显示输出</h2>
+              <div class="kv-list">
+                <div class="kv-item">
+                  <div class="kv-key">wire format</div>
+                  <div class="kv-value">n/a（无等价公开字段）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">显示器 ICC</div>
+                  <div class="kv-value">VG32AQL1A colorspace</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">EDR headroom</div>
+                  <div class="kv-value">当前 1.20× / 潜在 6.04×</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">最大亮度</div>
+                  <div class="kv-value">n/a（用 EDR headroom）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">位数</div>
+                  <div class="kv-value">16（RGhA）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">HDR / Advanced Color</div>
+                  <div class="kv-value">已启用（EDR）</div>
+                </div>
+                <div class="kv-item">
+                  <div class="kv-key">实际 scanout 空间</div>
+                  <div class="kv-value">不公开</div>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 模拟无边框程序关闭；原型中按 Esc 重新打开 -->
+  <div class="closed-screen" id="closed-screen" hidden>
+    <div class="closed-card">
+      <p>CHROMA COLORPICKER</p>
+      <h1>程序已关闭</h1>
+      <span>按 <kbd>Esc</kbd> 重新打开</span>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const closedScreen = document.getElementById('closed-screen');
+      let closed = false;
+
+      function setClosed(value) {
+        closed = value;
+        closedScreen.hidden = !value;
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        setClosed(!closed);
+      });
+    })();
+  </script>
+</body>
+</html>

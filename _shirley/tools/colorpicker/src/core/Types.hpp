@@ -33,6 +33,7 @@ struct MonitorInfo
     std::string id;              // 平台稳定标识，例如 Windows 的 \\.\DISPLAY1
     std::string name;            // 友好名称（平台能提供时）
     RectI bounds;
+    double scale = 1.0;          // point → pixel 比例；Windows 通常为 1.0
     bool primary = false;
     std::uintptr_t nativeHandle = 0; // HMONITOR / CGDirectDisplayID
 };
@@ -41,6 +42,7 @@ enum class PixelEncoding
 {
     Unknown,
     Fp16,          // R16G16B16A16_FLOAT：Windows 为 scRGB linear
+    Rgba16Float,   // macOS ScreenCaptureKit RGhA：16F RGBA
     Bgra8,         // B8G8R8A8_UNORM：SDR 编码值
     R10G10B10A2,
     YCbCr10,       // macOS ScreenCaptureKit HDR 预留
@@ -52,6 +54,11 @@ struct CaptureFormat
     int bitsPerChannel = 0;
     bool linear = false;
     std::string name = "unknown";
+
+    // macOS ScreenCaptureKit 的实际配置；其他后端可为空。
+    std::string pixelFormat;
+    std::string colorSpaceName;
+    std::string colorMatrix;
 };
 
 /// 显示器/输出信息。可选字段在平台不提供时为 nullopt。
@@ -65,7 +72,12 @@ struct DisplayInfo
     std::string colorEncoding = "unknown";
     std::uint32_t configBitsPerColor = 0;
     std::uint32_t bitsPerColor = 0;
-    std::string colorSpace = "unknown";
+    std::string colorSpace = "unknown";   // 管理后/捕获输出空间
+    std::string displayIcc;              // 显示器实际 ICC profile 名称
+    std::string displayGamut;            // 显示器 ICC 色域，例如 Display P3
+    std::string displayTransfer;        // 显示器 ICC 传递函数，例如 sRGB
+    std::string displayWhitePoint;      // 白点 xy
+    std::string displayMatrix;          // 3x3 显示矩阵，多行
     std::string wireFormat; // UI 用短描述；为空时 UI 回退到 colorSpace
     std::optional<std::uint32_t> sdrWhiteLevelRaw;
     std::optional<double> sdrWhiteNits;
@@ -80,6 +92,8 @@ struct DisplayInfo
     std::string friendlyName;
     std::string adapterName;
     bool remoteSession = false;
+    double edrHeadroomCurrent = 1.0;
+    double edrHeadroomPotential = 1.0;
 };
 
 struct ColorSample

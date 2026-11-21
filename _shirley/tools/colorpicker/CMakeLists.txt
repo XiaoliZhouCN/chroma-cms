@@ -105,14 +105,19 @@ elseif(APPLE)
 
     target_link_libraries(colorpicker PRIVATE
         "-framework AppKit"
+        "-framework Foundation"
         "-framework CoreGraphics"
-        "-framework ApplicationServices")
+        "-framework CoreMedia"
+        "-framework CoreVideo"
+        "-framework ApplicationServices"
+        "-framework ScreenCaptureKit"
+        "-framework ColorSync")
 
     set_target_properties(colorpicker PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_BUNDLE_NAME "ChromaColorPicker")
 
-    message(STATUS "colorpicker: macOS skeleton (ScreenCaptureKit HDR backend TODO)")
+    message(STATUS "colorpicker: macOS ScreenCaptureKit (SDR + HDR stream)")
 else()
     message(FATAL_ERROR "colorpicker: unsupported platform")
 endif()
