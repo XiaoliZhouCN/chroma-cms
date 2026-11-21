@@ -7,6 +7,7 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <AppKit/AppKit.h>
 #import <ColorSync/ColorSync.h>
+#import <dispatch/dispatch.h>
 
 #include <array>
 #include <cstdint>
@@ -352,6 +353,94 @@ std::string displayColorSpaceName(CGDirectDisplayID display)
     CGColorSpaceRelease(space);
     return result;
 }
+
+// SCScreenshotManager 在 HDRLocalDisplay 下返回 RGhA CGImage。
+// 这里只接受 16 bpc / 64 bpp，失败时打印格式并返回空，绝不静默降成 8-bit。
+CVPixelBufferRef pixelBufferFromCGImage(CGImageRef image)
+{
+    if (image == nullptr) {
+        return nullptr;
+    }
+
+    const std::size_t bitsPerComponent = CGImageGetBitsPerComponent(image);
+    const std::size_t bitsPerPixel = CGImageGetBitsPerPixel(image);
+    if (bitsPerComponent != 16 || bitsPerPixel != 64) {
+        CGColorSpaceRef space = CGImageGetColorSpace(image);
+        CFStringRef spaceName = space != nullptr ? CGColorSpaceCopyName(space) : nullptr;
+        std::fprintf(stderr,
+                     "[mac] screenshot CGImage 格式不支持: bpc=%zu bpp=%zu colorSpace=%s\n",
+                     bitsPerComponent, bitsPerPixel,
+                     spaceName != nullptr
+                         ? cfStringToStd(spaceName).c_str()
+                         : "(nil)");
+        if (spaceName != nullptr) {
+            CFRelease(spaceName);
+        }
+        return nullptr;
+    }
+
+    CGDataProviderRef provider = CGImageGetDataProvider(image);
+    if (provider == nullptr) {
+        std::fprintf(stderr, "[mac] screenshot CGImage 没有 data provider\n");
+        return nullptr;
+    }
+    CFDataRef data = CGDataProviderCopyData(provider);
+    if (data == nullptr) {
+        std::fprintf(stderr, "[mac] screenshot CGImage data 读取失败\n");
+        return nullptr;
+    }
+
+    const int width = static_cast<int>(CGImageGetWidth(image));
+    const int height = static_cast<int>(CGImageGetHeight(image));
+    const std::size_t sourceRowBytes = CGImageGetBytesPerRow(image);
+    const std::size_t sourceSize = static_cast<std::size_t>(CFDataGetLength(data));
+    const std::size_t expectedRowBytes = static_cast<std::size_t>(width) * 8u;
+    if (width <= 0 || height <= 0 || sourceRowBytes < expectedRowBytes ||
+        sourceSize < sourceRowBytes * static_cast<std::size_t>(height)) {
+        std::fprintf(stderr,
+                     "[mac] screenshot CGImage 数据尺寸无效: %dx%d row=%zu data=%zu\n",
+                     width, height, sourceRowBytes, sourceSize);
+        CFRelease(data);
+        return nullptr;
+    }
+
+    NSDictionary *attributes = @{
+        (__bridge id)kCVPixelBufferIOSurfacePropertiesKey : @{},
+        (__bridge id)kCVPixelBufferCGImageCompatibilityKey : @YES,
+        (__bridge id)kCVPixelBufferCGBitmapContextCompatibilityKey : @YES,
+    };
+    CVPixelBufferRef pixel = nullptr;
+    const CVReturn createResult = CVPixelBufferCreate(
+        kCFAllocatorDefault, width, height, kCVPixelFormatType_64RGBAHalf,
+        (__bridge CFDictionaryRef)attributes, &pixel);
+    if (createResult != kCVReturnSuccess || pixel == nullptr) {
+        std::fprintf(stderr, "[mac] CVPixelBufferCreate(RGhA) 失败: %d\n", createResult);
+        CFRelease(data);
+        return nullptr;
+    }
+
+    if (CVPixelBufferLockBaseAddress(pixel, 0) != kCVReturnSuccess) {
+        std::fprintf(stderr, "[mac] CVPixelBufferLockBaseAddress 失败\n");
+        CVPixelBufferRelease(pixel);
+        CFRelease(data);
+        return nullptr;
+    }
+
+    auto *destination = static_cast<std::uint8_t *>(CVPixelBufferGetBaseAddress(pixel));
+    const std::size_t destinationRowBytes = CVPixelBufferGetBytesPerRow(pixel);
+    const std::uint8_t *source = CFDataGetBytePtr(data);
+    for (int row = 0; row < height; ++row) {
+        const std::size_t copyBytes =
+            std::min(sourceRowBytes, destinationRowBytes);
+        std::memcpy(destination + static_cast<std::size_t>(row) * destinationRowBytes,
+                    source + static_cast<std::size_t>(row) * sourceRowBytes,
+                    copyBytes);
+    }
+
+    CVPixelBufferUnlockBaseAddress(pixel, 0);
+    CFRelease(data);
+    return pixel;
+}
 } // namespace
 
 struct MacStreamState
@@ -362,12 +451,9 @@ struct MacStreamState
     int height = 0;
     std::string error;
 
-    void handleSampleBuffer(CMSampleBufferRef sampleBuffer)
+    // 流模式与截图模式共用同一份 latest 帧状态。
+    void handlePixelBuffer(CVPixelBufferRef image)
     {
-        if (sampleBuffer == nullptr) {
-            return;
-        }
-        CVImageBufferRef image = CMSampleBufferGetImageBuffer(sampleBuffer);
         if (image == nullptr) {
             return;
         }
@@ -386,6 +472,17 @@ struct MacStreamState
         latest = pixel;
         width = newWidth;
         height = newHeight;
+    }
+
+    void handleSampleBuffer(CMSampleBufferRef sampleBuffer)
+    {
+        if (sampleBuffer == nullptr) {
+            return;
+        }
+        CVImageBufferRef image = CMSampleBufferGetImageBuffer(sampleBuffer);
+        if (image != nullptr) {
+            handlePixelBuffer((CVPixelBufferRef)image);
+        }
     }
 };
 
@@ -445,17 +542,84 @@ struct MacCaptureSession::Impl
     bool customFormat = false;
     bool edrLinear = false;
     bool bt2020Output = false;
+    bool screenshotMode = false;
+    SCContentFilter *screenshotFilter = nil;
+    SCStreamConfiguration *screenshotConfiguration = nil;
     CGColorSpaceRef displayLinearSpace = nullptr;
     CGColorSpaceRef p3LinearSpace = nullptr;
 
+    void releaseScreenshotResources()
+    {
+#if !__has_feature(objc_arc)
+        if (screenshotFilter != nil) {
+            [screenshotFilter release];
+        }
+        if (screenshotConfiguration != nil) {
+            [screenshotConfiguration release];
+        }
+#endif
+        screenshotFilter = nil;
+        screenshotConfiguration = nil;
+    }
+
     ~Impl()
     {
+        releaseScreenshotResources();
         if (displayLinearSpace != nullptr) {
             CGColorSpaceRelease(displayLinearSpace);
         }
         if (p3LinearSpace != nullptr) {
             CGColorSpaceRelease(p3LinearSpace);
         }
+    }
+
+    bool captureScreenshot()
+    {
+        if (screenshotFilter == nil || screenshotConfiguration == nil) {
+            state->error = "截图模式没有 screenshotFilter/configuration";
+            std::fprintf(stderr, "[mac] %s\n", state->error.c_str());
+            return false;
+        }
+
+        __block CGImageRef captured = nullptr;
+        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+        [SCScreenshotManager
+            captureImageWithFilter:screenshotFilter
+                     configuration:screenshotConfiguration
+                 completionHandler:^(CGImageRef image, NSError *error) {
+                     if (error != nil) {
+                         std::fprintf(stderr, "[mac] screenshot 失败: %s\n",
+                                      [[error localizedDescription] UTF8String]);
+                     } else if (image != nullptr) {
+                         captured = CGImageRetain(image);
+                     }
+                     dispatch_semaphore_signal(semaphore);
+                 }];
+
+        const long waitResult = dispatch_semaphore_wait(
+            semaphore, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+#if !__has_feature(objc_arc)
+        dispatch_release(semaphore);
+#endif
+        if (waitResult != 0) {
+            state->error = "截图超时";
+            std::fprintf(stderr, "[mac] screenshot 超时\n");
+            return false;
+        }
+        if (captured == nullptr) {
+            state->error = "截图返回空 CGImage";
+            return false;
+        }
+
+        CVPixelBufferRef pixel = pixelBufferFromCGImage(captured);
+        CGImageRelease(captured);
+        if (pixel == nullptr) {
+            state->error = "截图 CGImage 转 CVPixelBuffer 失败";
+            return false;
+        }
+        state->handlePixelBuffer(pixel);
+        CVPixelBufferRelease(pixel);
+        return true;
     }
 
     void start(SCShareableContent *content)
@@ -490,6 +654,38 @@ struct MacCaptureSession::Impl
             [[SCContentFilter alloc] initWithDisplay:target
                                excludingApplications:excluded
                                     exceptingWindows:@[]];
+
+        if (screenshotMode) {
+#if defined(__arm64__)
+            if (@available(macOS 15.0, *)) {
+                screenshotFilter = filter;
+                SCStreamConfiguration *configuration = [SCStreamConfiguration
+                    streamConfigurationWithPreset:
+                        SCStreamConfigurationPresetCaptureHDRScreenshotLocalDisplay];
+                // preset 已设置 captureDynamicRange/pixelFormat/colorSpace；
+                // 这里再显式写一遍，避免依赖系统 preset 的默认值。
+                configuration.captureDynamicRange = SCCaptureDynamicRangeHDRLocalDisplay;
+                configuration.pixelFormat = kCVPixelFormatType_64RGBAHalf;
+                configuration.colorSpaceName = kCGColorSpaceExtendedLinearDisplayP3;
+                configuration.width = static_cast<size_t>(CGDisplayPixelsWide(displayID));
+                configuration.height = static_cast<size_t>(CGDisplayPixelsHigh(displayID));
+                configuration.showsCursor = NO;
+                configuration.scalesToFit = NO;
+                configuration.preservesAspectRatio = NO;
+#if !__has_feature(objc_arc)
+                screenshotConfiguration = [configuration retain];
+#else
+                screenshotConfiguration = configuration;
+#endif
+                std::fprintf(stderr,
+                             "[mac] screenshot mode: preset=CaptureHDRScreenshotLocalDisplay "
+                             "pixelFormat=RGhA colorSpace=ExtendedLinearDisplayP3 "
+                             "size=%zux%zu\n",
+                             configuration.width, configuration.height);
+                return;
+            }
+#endif
+        }
 
         SCStreamConfiguration *configuration = nil;
         if (hdr) {
@@ -591,6 +787,7 @@ struct MacCaptureSession::Impl
         stream = nil;
         output = nil;
         queue = nullptr;
+        releaseScreenshotResources();
 
         std::lock_guard<std::mutex> lock(state->mutex);
         if (state->latest != nullptr) {
@@ -631,6 +828,11 @@ bool MacCaptureSession::initialize(const cp::MonitorInfo &monitor, cp::NativeWin
     m_impl->hdr = supportsHdrCapture(m_impl->displayID);
     m_impl->customFormat = m_hdrMode == cp::HdrCaptureMode::CustomFormat;
     m_impl->edrLinear = m_hdrMode == cp::HdrCaptureMode::ApplePresetEdrLinear;
+#if defined(__arm64__)
+    if (@available(macOS 15.0, *)) {
+        m_impl->screenshotMode = m_impl->hdr && m_impl->customFormat;
+    }
+#endif
     m_display.hdr = m_impl->hdr;
     m_display.bitsPerColor = m_impl->hdr ? (m_impl->customFormat ? 16 : 10) : 8;
     m_display.configBitsPerColor = m_display.bitsPerColor;
@@ -684,7 +886,9 @@ bool MacCaptureSession::initialize(const cp::MonitorInfo &monitor, cp::NativeWin
                  m_impl->hdr ? "HDR" : "SDR",
                  m_impl->hdr
                      ? (m_impl->customFormat
-                            ? "custom RGhA + ExtendedLinearP3"
+                            ? (m_impl->screenshotMode
+                                   ? "custom RGhA screenshot + ExtendedLinearP3"
+                                   : "custom RGhA + ExtendedLinearP3")
                             : (m_impl->edrLinear
                                    ? "raw xf44 YCbCr -> BT.709 -> PQ -> linear P3"
                                    : "Apple preset xf44 + P3 PQ -> Extended Linear P3"))
@@ -720,6 +924,11 @@ bool MacCaptureSession::captureFrame()
 {
     if (!m_impl) {
         return false;
+    }
+    if (m_impl->screenshotMode) {
+        if (!m_impl->captureScreenshot()) {
+            return false;
+        }
     }
     std::lock_guard<std::mutex> lock(m_impl->state->mutex);
     return m_impl->state->latest != nullptr;
