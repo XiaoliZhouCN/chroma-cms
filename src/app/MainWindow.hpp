@@ -5,18 +5,19 @@
 
 #include <memory>
 
-namespace chroma::media { struct Image; }
+#include "probe/ProbeConfig.hpp"
 
-class QLabel;
-class QTabBar;
+class QEvent;
+class QResizeEvent;
 class QWidget;
+
+namespace chroma::media { struct Image; }
 
 namespace chroma::app {
 
+class CSMViewerWidget;
 class ViewportWidget;
 
-/// 主窗口：双视图对照（左 = 手写原生后端，右 = Skia 后端）。
-/// Tab：左 / 右 / 并排；"叠图"需要离屏合成，P1 再实现（当前占位禁用）。
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 
@@ -25,20 +26,58 @@ public:
     MainWindow(std::shared_ptr<const media::Image> image, QString imagePath,
                QWidget* parent = nullptr);
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
-    void buildLayout(std::shared_ptr<const media::Image> image, const QString& imagePath);
-    void applyTab(int index);
-    void updateStatus();
+    enum class DisplayMode
+    {
+        SkiaOnly = 0,
+        NativeOnly = 1,
+        Both = 2,
+    };
 
-    ViewportWidget* m_left = nullptr;
-    ViewportWidget* m_right = nullptr;
-    QWidget* m_leftPanel = nullptr;
-    QWidget* m_rightPanel = nullptr;
-    QTabBar* m_tabs = nullptr;
-    QLabel* m_status = nullptr;
+    void buildLayout(std::shared_ptr<const media::Image> image, QString imagePath);
+    void updateWindowGeometry();
+    void layoutViewports();
+    void applyDisplayMode();
+    void toggleDisplayMode();
+    void beginTabOverride();
+    void endTabOverride();
+    void applyViewTransforms();
+    bool handleTransformKey(int key);
+    void updateInfo();
+    void updateHover(QObject* watched);
+    void initProbe();
+    void onFramePresented(CSMViewerWidget* viewer);
+    void runProbe(CSMViewerWidget* viewer);
 
-    QString m_leftBackend = QStringLiteral("初始化中…");
-    QString m_rightBackend = QStringLiteral("初始化中…");
+    ViewportWidget* viewportUnderMouse() const;
+    ViewportWidget* activeViewport() const;
+
+    QWidget* m_central = nullptr;
+    ViewportWidget* m_native = nullptr;
+    ViewportWidget* m_skia = nullptr;
+    ViewportWidget* m_hoverViewport = nullptr;
+
+    std::shared_ptr<const media::Image> m_image;
+    QString m_imagePath;
+    DisplayMode m_mode = DisplayMode::SkiaOnly;
+
+    // 两个 view / 两个 API 共用同一套旋转缩放状态。
+    int m_quarterTurns = 0;
+    float m_zoom = 1.0f;
+
+    std::unique_ptr<chroma::probe::ProbeConfig> m_probeConfig;
+    QString m_probeOutputPath;
+    bool m_probePending = false;
+
+    bool m_overrideActive = false;
+    ViewportWidget* m_overrideViewport = nullptr;
+    int m_overrideOriginalBackend = 0;
 };
 
 } // namespace chroma::app

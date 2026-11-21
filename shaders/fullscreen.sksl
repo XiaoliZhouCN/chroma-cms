@@ -31,7 +31,7 @@ half4 main(float2 coord) {
     // contain-fit / 旋转 / 缩放全部在 CPU 侧合成，这里只判断是否落在图内。
     if (coord.x < 0.0 || coord.x > imageSize.x ||
         coord.y < 0.0 || coord.y > imageSize.y) {
-        return half4(0.02, 0.02, 0.02, 1.0);
+        return half4(0.0, 0.0, 0.0, 1.0);
     }
 
     float3 code       = float3(image.eval(coord).rgb);   // 归一化 PQ 码值

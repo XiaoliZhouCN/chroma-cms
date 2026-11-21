@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/IRenderer.hpp"
+#include "render/IRendererReadback.hpp"
 #include "render/IViewTransform.hpp"
 
 #include <cstdint>
@@ -11,7 +12,9 @@ namespace chroma::render
 /// 第三后端：Skia（Ganesh）。
 /// 本类负责平台无关的 SkSL / SkCanvas / 图像 / 交互；
 /// 原生 context、Ganesh、离屏目标与 present 由 SkiaGpuBackend 负责。
-class SkiaRenderer final : public IRenderer, public IViewTransform
+class SkiaRenderer final : public IRenderer,
+                      public IViewTransform,
+                      public IRendererReadback
 {
 public:
     SkiaRenderer();
@@ -30,6 +33,9 @@ public:
 
     void setQuarterTurns(int quarterTurns) override;
     void setZoom(float zoom) override;
+
+    bool readPixels(const std::vector<PixelPoint>& points,
+                    std::vector<RgbaF32>& out) override;
 
 private:
     void createOffscreenSurface();

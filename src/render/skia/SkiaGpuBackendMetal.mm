@@ -158,6 +158,18 @@ void SkiaGpuBackendMetal::endFrame(SkSurface &surface)
         return;
     }
 
+    // 先把 drawable 整块清成纯黑，再做离屏纹理拷贝。
+    // 这样 zoom/rotate 后即使离屏 surface 有任何未覆盖区域，
+    // 最终上屏的 letterbox 也一定是黑色，而不是窗口背景灰。
+    MTLRenderPassDescriptor *clearPass = [MTLRenderPassDescriptor renderPassDescriptor];
+    clearPass.colorAttachments[0].texture = drawable.texture;
+    clearPass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    clearPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    clearPass.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    id<MTLRenderCommandEncoder> clearEncoder =
+        [commandBuffer renderCommandEncoderWithDescriptor:clearPass];
+    [clearEncoder endEncoding];
+
     id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
     [blit copyFromTexture:offscreenTexture
               sourceSlice:0

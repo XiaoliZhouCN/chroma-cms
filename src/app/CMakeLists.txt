@@ -4,12 +4,17 @@ qt_add_executable(ChromaCMS
     MainWindow.cpp
     ViewportWidget.hpp
     ViewportWidget.cpp
+    CSMViewerWidget.hpp
+    CSMViewerWidget.cpp
+    AssistInfoWidget.hpp
+    AssistInfoWidget.cpp
     )
 
 target_link_libraries(ChromaCMS PRIVATE
     Qt6::Widgets
     chroma_render
     chroma_media
+    chroma_probe
     chroma_core)
 
 chroma_set_warnings(ChromaCMS)

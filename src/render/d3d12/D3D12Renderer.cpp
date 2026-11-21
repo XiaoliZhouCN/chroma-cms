@@ -12,7 +12,7 @@ namespace
 {
 
 // 清屏色：深蓝灰。第一步只要"能看见一层稳定的颜色"就算成功。
-constexpr float kClearColor[4] = {0.02f, 0.02f, 0.02f, 1.0f};
+constexpr float kClearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
 // 取 exe 所在目录：着色器随 exe 发布在 <exe目录>/shaders/ 下
 std::wstring executableDirectory()

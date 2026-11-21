@@ -17,7 +17,7 @@ namespace chroma::render
 namespace
 {
 // 清屏色：与 Windows 第 2 步保持一致，线性 (0.02, 0.02, 0.02)。
-constexpr float kClearColor[4] = {0.02f, 0.02f, 0.02f, 1.0f};
+constexpr float kClearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
 std::string nsErrorText(NSError *error)
 {

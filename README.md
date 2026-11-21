@@ -41,10 +41,11 @@ src/io/        容器探测 + 色彩元数据存在性（已落地；ICC 内容�
 src/media/     FFmpeg 图像解码（当前 RGBA16；Frame/ColorDescription P1）
 src/gfx/       原生上下文（D3D12 / Metal）
 src/render/    三后端（手写 D3D12 / 手写 Metal / Skia）
-src/app/       Qt UI（双视图骨架：左 / 右 / 并排）
+src/app/       Qt UI（Skia / Native / Dual）
+src/probe/     Stage B 色块探针（配置、CSV、校验）
 tools/         chroma-probe、doc-check、scripts（已落地）；chroma-bench、pattern-gen 计划
 tests/         unit（6 项已接入）+ corpus（已落地）；integration / e2e / golden 计划
-docs/          ROADMAP + color + testing + handoff + decisions + third-party
+docs/          ROADMAP + architecture + features + color + testing + handoff + decisions + third-party
 ```
 
 ## 文档入口
@@ -55,6 +56,9 @@ docs/          ROADMAP + color + testing + handoff + decisions + third-party
 - [`docs/testing/00-index.md`](docs/testing/00-index.md)：测试手册
 - [`docs/handoff/README.md`](docs/handoff/README.md)：历史交接记录
 - [`docs/decisions/README.md`](docs/decisions/README.md)：决策记录（ADR-lite）
+- [`docs/features/README.md`](docs/features/README.md)：功能点行为与验收
+- [`docs/ARCHITECTURE_DESIGN.md`](docs/ARCHITECTURE_DESIGN.md)：架构决策与边界
+- [`docs/ARCHITECTURE_IMPLEMENTATION.md`](docs/ARCHITECTURE_IMPLEMENTATION.md)：实现补充说明
 
 ## 构建
 

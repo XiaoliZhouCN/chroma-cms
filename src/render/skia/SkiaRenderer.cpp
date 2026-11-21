@@ -9,6 +9,7 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkMilestone.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
@@ -113,7 +114,7 @@ void SkiaRenderer::drawFrame()
 {
     // step 1: 取离屏 canvas 并清屏。clear 色同时会作为 contain-fit 留边/图外区域的底色。
     SkCanvas *canvas = m_impl->surface->getCanvas();
-    canvas->clear(SkColor4f{0.02f, 0.02f, 0.02f, 1.0f});
+    canvas->clear(SkColor4f{0.0f, 0.0f, 0.0f, 1.0f});
 
     // 没有图像或 SkSL 还没编译好：只保留清屏，直接返回。
     if (m_impl->image == nullptr || m_impl->imageEffect == nullptr) { return; }
@@ -323,6 +324,45 @@ void SkiaRenderer::setImage(std::uint32_t width, std::uint32_t height, const std
     m_impl->imageWidth = width;
     m_impl->imageHeight = height;
     std::fprintf(stderr, "[skia] image = %u x %u (UNORM16 -> kR16G16B16A16_unorm)\n", width, height);
+}
+
+bool SkiaRenderer::readPixels(const std::vector<PixelPoint>& points,
+                              std::vector<RgbaF32>& out)
+{
+    if (!m_impl->initialized || !m_impl->surface || !m_impl->gr || points.empty()) {
+        return false;
+    }
+
+    // Probe 读取的是 present 后的 offscreen surface。
+    // readPixels 前显式同步，避免读到上一帧或未完成的 GPU 内容。
+    m_impl->gr->flushAndSubmit(GrSyncCpu::kYes);
+
+    const int width = static_cast<int>(m_impl->width);
+    const int height = static_cast<int>(m_impl->height);
+    const SkImageInfo info = SkImageInfo::Make(
+        width, height, kRGBA_F32_SkColorType, kPremul_SkAlphaType);
+    std::vector<float> pixels(static_cast<std::size_t>(width) *
+                              static_cast<std::size_t>(height) * 4u);
+    if (!m_impl->surface->readPixels(info, pixels.data(), info.minRowBytes(), 0, 0)) {
+        std::fprintf(stderr, "[skia] surface->readPixels 失败\n");
+        return false;
+    }
+
+    out.clear();
+    out.reserve(points.size());
+    for (const PixelPoint& point : points) {
+        RgbaF32 value{};
+        if (point.x < static_cast<std::uint32_t>(width) &&
+            point.y < static_cast<std::uint32_t>(height)) {
+            const std::size_t index =
+                (static_cast<std::size_t>(point.y) * static_cast<std::size_t>(width) +
+                 point.x) * 4u;
+            value = {pixels[index + 0], pixels[index + 1],
+                     pixels[index + 2], pixels[index + 3]};
+        }
+        out.push_back(value);
+    }
+    return true;
 }
 
 void SkiaRenderer::setQuarterTurns(int quarterTurns)

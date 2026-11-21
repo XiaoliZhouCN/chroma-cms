@@ -103,6 +103,14 @@ void MetalContext::initialize(void *nativeView, std::uint32_t width, std::uint32
     layer.device = device;
     layer.pixelFormat = MTLPixelFormatRGBA16Float;      // 像素格式 16 float
     layer.framebufferOnly = YES;
+    // 任何尚未被 drawable 覆盖的区域都必须是纯黑，而不是宿主窗口的背景灰。
+    layer.opaque = YES;
+    CGColorRef black = CGColorCreateSRGB(0.0, 0.0, 0.0, 1.0);
+    if (black != nullptr) {
+        layer.backgroundColor = black;
+        metalView.layer.backgroundColor = black;
+        CGColorRelease(black);
+    }
     layer.maximumDrawableCount = 2;
     layer.displaySyncEnabled = YES;
     layer.contentsScale = host.window != nil ? host.window.backingScaleFactor : 1.0;

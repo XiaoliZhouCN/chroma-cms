@@ -1,191 +1,103 @@
 #include "app/ViewportWidget.hpp"
 
-#include "render/RendererFactory.hpp"
-#include "render/IRenderer.hpp"
-#include "render/IViewTransform.hpp"
+#include "app/AssistInfoWidget.hpp"
+#include "app/CSMViewerWidget.hpp"
 
-#include "media/ImageLoader.hpp"
-
-#include <utility>
-
-#include <QColor>
-#include <QDebug>
-#include <QPaintEvent>
-#include <QPainter>
 #include <QResizeEvent>
-#include <QShowEvent>
-#include <QKeyEvent>
-
-#include <cmath>
-#include <exception>
-#include <stdexcept>
-#include <algorithm>
 
 namespace chroma::app {
-namespace {
-constexpr float kZoomStep = 1.1f;
-constexpr float kMinZoom = 0.1f;
-constexpr float kMaxZoom = 8.0f;
-} // namespace
 
 ViewportWidget::ViewportWidget(QWidget* parent)
-    : ViewportWidget(render::BackendKind::Native, nullptr, parent)
+    : ViewportWidget(render::BackendKind::Skia, nullptr, parent)
 {
 }
 
-ViewportWidget::ViewportWidget(std::shared_ptr<const media::Image> image, QWidget* parent)
-    : ViewportWidget(render::BackendKind::Native, std::move(image), parent)
-{
-}
-
-ViewportWidget::ViewportWidget(render::BackendKind kind,
-                               std::shared_ptr<const media::Image> image, QWidget* parent)
+ViewportWidget::ViewportWidget(render::BackendKind defaultBackend,
+                               std::shared_ptr<const media::Image> image,
+                               QWidget* parent)
     : QWidget(parent)
-    , m_backendKind(kind)
-    , m_image(std::move(image))
+    , m_backend(defaultBackend)
 {
-    setAttribute(Qt::WA_NativeWindow);
-    setAttribute(Qt::WA_OpaquePaintEvent);
-    setAttribute(Qt::WA_NoSystemBackground);
-    setFocusPolicy(Qt::StrongFocus);
-    setMinimumSize(320, 240);
+    setObjectName(QStringLiteral("viewport"));
+    setAttribute(Qt::WA_StyledBackground, true);
+    setStyleSheet(QStringLiteral("QWidget#viewport { background-color: #000000; }"));
+
+    m_nativeViewer = new CSMViewerWidget(render::BackendKind::Native, image, this);
+    m_skiaViewer = new CSMViewerWidget(render::BackendKind::Skia, image, this);
+    m_nativeViewer->setGeometry(rect());
+    m_skiaViewer->setGeometry(rect());
+    m_nativeViewer->show();
+    m_skiaViewer->show();
+
+    m_info = new AssistInfoWidget(this);
+
+    connect(m_nativeViewer, &CSMViewerWidget::rendererReady, this, &ViewportWidget::rendererReady);
+    connect(m_skiaViewer, &CSMViewerWidget::rendererReady, this, &ViewportWidget::rendererReady);
+    connect(m_nativeViewer, &CSMViewerWidget::rendererFailed, this, &ViewportWidget::rendererFailed);
+    connect(m_skiaViewer, &CSMViewerWidget::rendererFailed, this, &ViewportWidget::rendererFailed);
+
+    raiseCurrent();
 }
 
-ViewportWidget::~ViewportWidget() = default;
-
-std::uint32_t ViewportWidget::physicalWidth() const
+void ViewportWidget::setImage(std::shared_ptr<const media::Image> image)
 {
-    return static_cast<std::uint32_t>(std::lround(width() * devicePixelRatioF()));
+    m_nativeViewer->setImage(image);
+    m_skiaViewer->setImage(std::move(image));
 }
 
-std::uint32_t ViewportWidget::physicalHeight() const
+void ViewportWidget::raiseCurrent()
 {
-    return static_cast<std::uint32_t>(std::lround(height() * devicePixelRatioF()));
-}
-
-void ViewportWidget::ensureRenderer()
-{
-    if (m_renderer || m_initAttempted) {        // 已初始化
-        return;
+    CSMViewerWidget* selected =
+        (m_backend == render::BackendKind::Native) ? m_nativeViewer : m_skiaViewer;
+    if (selected != nullptr) {
+        selected->raise();
     }
-    m_initAttempted = true;
-
-    try {
-        // step 1 init renderer
-        auto renderer = render::createRenderer(m_backendKind);
-        if (!renderer) {
-            throw std::runtime_error("Skia 后端未编译（需要 skia Release 预设）");
-        }
-
-        // QWidget::winId() 在 Windows 上是 HWND，在 macOS 上是 NSView*
-        // Q: 为什么要 先创建renderer 再 move 到 m_renderer？
-        // A: 先创建 renderer 并进行初始化，可以确保在初始化过程中捕获任何异常。如果直接在 m_renderer 中创建并初始化，一旦初始化失败，m_renderer 可能会处于不稳定状态。通过先创建一个局部的 renderer 对象，可以在初始化成功后再将其移动到 m_renderer，从而保证 m_renderer 始终处于有效状态。
-        renderer->initialize(reinterpret_cast<void*>(winId()), physicalWidth(), physicalHeight());
-
-        const char* backend = renderer->backendName();
-        m_renderer = std::move(renderer);
-        
-        // step 2 set image
-        if (m_image) {
-            m_renderer->setImage(m_image->width, m_image->height, m_image->rgba16.data());          // 获取该 vector 连续内存的首地址
-        }
-
-        // step 3 apply view transform
-        applyViewTransform();
-
-        qInfo().noquote() << "[gfx] backend =" << backend
-                          << " surface =" << physicalWidth() << "x" << physicalHeight()
-                          << " dpr =" << devicePixelRatioF();
-        emit rendererReady(QString::fromUtf8(backend));
-    }
-    catch (const std::exception& error) {
-        qCritical().noquote() << "[gfx] 初始化失败:" << error.what();
-        emit rendererFailed(QString::fromUtf8(error.what()));
+    if (m_info != nullptr) {
+        m_info->raise();
     }
 }
 
-/* ==================== Qt Event ==================== */
-// ViewportWidget entrance
-void ViewportWidget::showEvent(QShowEvent* event)
+void ViewportWidget::showBackend(render::BackendKind kind)
 {
-    QWidget::showEvent(event);
-    ensureRenderer();
-    setFocus(Qt::OtherFocusReason);
-    update();
-}
+    m_backend = kind;
+    raiseCurrent();
 
-void ViewportWidget::applyViewTransform()
-{
-    if (auto* transform = dynamic_cast<render::IViewTransform*>(m_renderer.get())) {
-        transform->setQuarterTurns(m_quarterTurns);
-        transform->setZoom(m_zoom);
+    // 同步触发一次渲染；清屏由 renderer 的每个 render pass 自己完成。
+    if (auto* selected = viewer()) {
+        selected->repaint();
     }
 }
 
-void ViewportWidget::keyPressEvent(QKeyEvent* event)
+void ViewportWidget::setApiTransform(render::BackendKind kind, int quarterTurns, float zoom)
 {
-    switch (event->key()) {
-    case Qt::Key_A:
-        m_quarterTurns = (m_quarterTurns + 1) & 3;   // 逆时针 90°
-        break;
-    case Qt::Key_D:
-        m_quarterTurns = (m_quarterTurns + 3) & 3;   // 顺时针 90°
-        break;
-    case Qt::Key_Q:
-        m_zoom = std::max(kMinZoom, m_zoom / kZoomStep);   // 缩小
-        break;
-    case Qt::Key_E:
-        m_zoom = std::min(kMaxZoom, m_zoom * kZoomStep);   // 放大
-        break;
-    case Qt::Key_R:
-        m_quarterTurns = 0;
-        m_zoom = 1.0f;
-        break;
-    default:
-        QWidget::keyPressEvent(event);
-        return;
+    CSMViewerWidget* target =
+        (kind == render::BackendKind::Native) ? m_nativeViewer : m_skiaViewer;
+    if (target != nullptr) {
+        target->setViewTransform(quarterTurns, zoom);
     }
+}
 
-    applyViewTransform();
-    update();
-    event->accept();
+CSMViewerWidget* ViewportWidget::viewer() const
+{
+    return (m_backend == render::BackendKind::Native) ? m_nativeViewer : m_skiaViewer;
+}
+
+void ViewportWidget::setInfoText(const QString& text)
+{
+    m_info->setInfo(text);
+    m_info->move(12, 12);
+    m_info->raise();
 }
 
 void ViewportWidget::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
-
-    if (m_renderer) {
-        try {
-            m_renderer->resize(physicalWidth(), physicalHeight());
-        }
-        catch (const std::exception& error) {
-            qCritical().noquote() << "[gfx] resize 失败:" << error.what();
-        }
+    if (m_nativeViewer) m_nativeViewer->setGeometry(rect());
+    if (m_skiaViewer) m_skiaViewer->setGeometry(rect());
+    if (m_info) {
+        m_info->move(12, 12);
+        m_info->raise();
     }
-    update();
-}
-
-// Renderer present entrance
-void ViewportWidget::paintEvent(QPaintEvent* event)
-{
-    Q_UNUSED(event);
-
-    if (m_renderer) {
-        try {
-            m_renderer->present();
-            return;
-        }
-        catch (const std::exception& error) {
-            qCritical().noquote() << "[gfx] present 失败:" << error.what();
-        }
-    }
-
-    // 渲染器没起来时的占位，避免全黑看不出状态
-    QPainter painter(this);
-    painter.fillRect(rect(), QColor(24, 24, 28));
-    painter.setPen(QColor(230, 120, 120));
-    painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("渲染器未就绪\n看控制台日志"));
 }
 
 } // namespace chroma::app

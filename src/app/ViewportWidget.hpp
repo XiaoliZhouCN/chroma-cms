@@ -1,67 +1,59 @@
 #pragma once
 
-#include <QString>
-#include <QWidget>
-
 #include "render/RendererFactory.hpp"
 
-#include <cstdint>
+#include <QWidget>
+
 #include <memory>
 
-class QKeyEvent;
-class QPaintEvent;
 class QResizeEvent;
-class QShowEvent;
 
 namespace chroma::media { struct Image; }
 
-namespace chroma::render {
-class IRenderer;
-}
-
 namespace chroma::app {
 
-/// 原生表面宿主：提供一个稳定的 native window 与正确的物理像素尺寸。
+class AssistInfoWidget;
+class CSMViewerWidget;
+
+/// 一个对照 view：
+///   CSMViewerWidget(Native) + CSMViewerWidget(Skia) + AssistInfoWidget
 ///
-/// 三个属性是必需的：
-///   WA_NativeWindow       保证有独立 native window
-///   WA_OpaquePaintEvent   禁止 Qt 擦背景
-///   WA_NoSystemBackground 同上，避免和交换链抢后台缓冲
+/// 两个 CSMViewerWidget 在程序生命周期内同时存在，
+/// 切换只做 raise/lower，不销毁 renderer。
 class ViewportWidget final : public QWidget {
     Q_OBJECT
 
 public:
     explicit ViewportWidget(QWidget* parent = nullptr);
-    explicit ViewportWidget(std::shared_ptr<const media::Image> image,
-                            QWidget* parent = nullptr);
-    ViewportWidget(render::BackendKind kind, std::shared_ptr<const media::Image> image,
+    ViewportWidget(render::BackendKind defaultBackend,
+                   std::shared_ptr<const media::Image> image,
                    QWidget* parent = nullptr);
-    ~ViewportWidget() override;
+
+    void setImage(std::shared_ptr<const media::Image> image);
+    void showBackend(render::BackendKind kind);
+    void setApiTransform(render::BackendKind kind, int quarterTurns, float zoom);
+    render::BackendKind backendKind() const { return m_backend; }
+
+    void setInfoText(const QString& text);
+    CSMViewerWidget* viewer() const;
+    CSMViewerWidget* nativeViewer() const { return m_nativeViewer; }
+    CSMViewerWidget* skiaViewer() const { return m_skiaViewer; }
+    AssistInfoWidget* assistInfo() const { return m_info; }
 
 signals:
     void rendererReady(const QString& backend);
     void rendererFailed(const QString& message);
 
 protected:
-    void showEvent(QShowEvent* event) override;
-    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
-    void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    void ensureRenderer();
-    void applyViewTransform();
-    std::uint32_t physicalWidth() const;
-    std::uint32_t physicalHeight() const;
+    void raiseCurrent();
 
-    render::BackendKind m_backendKind = render::BackendKind::Native;
-    std::unique_ptr<render::IRenderer> m_renderer;
-    bool m_initAttempted = false;
-
-    int m_quarterTurns = 0;
-    float m_zoom = 1.0f;
-
-    std::shared_ptr<const media::Image> m_image;
+    CSMViewerWidget* m_nativeViewer = nullptr;
+    CSMViewerWidget* m_skiaViewer = nullptr;
+    AssistInfoWidget* m_info = nullptr;
+    render::BackendKind m_backend = render::BackendKind::Skia;
 };
 
 } // namespace chroma::app
